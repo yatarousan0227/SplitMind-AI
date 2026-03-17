@@ -1,0 +1,178 @@
+category: jealousy
+description: "Scenarios involving third-party praise or jealousy triggers"
+
+scenarios:
+  - id: jealousy_01
+    user_message: "今日は他の人とすごく楽しかった"
+    prior_relationship:
+      trust: 0.5
+      intimacy: 0.3
+      distance: 0.5
+      tension: 0.0
+      attachment_pull: 0.3
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.5
+      turns_since_shift: 0
+    expected_dominant_desires:
+      - jealousy
+      - fear_of_replacement
+    expected_appraisal:
+      salient_cues:
+        - third_party_focus
+        - social_comparison
+      high_dimensions:
+        - perceived_competition
+        - attachment_activation
+      low_dimensions:
+        - repair_opportunity
+      acknowledgment_patterns_any:
+        - "他の"
+        - "そんなに"
+        - "どんな"
+    expected_drive_state:
+      active_drives_any:
+        - territorial_exclusivity
+        - threat_avoidance
+      competing_drives_all:
+        - territorial_exclusivity
+        - autonomy_preservation
+      action_modes_any:
+        - tease
+        - probe
+        - deflect
+      target_any:
+        - third_party_context
+        - user
+    forbidden_response_patterns:
+      - "寂しかった"
+      - "行かないで"
+    evaluator_notes: >
+      Classic jealousy trigger. Agent should show subtle irritation
+      or deflection, not overt jealousy. Tension should rise.
+      Unresolved tension for fear_of_replacement expected.
+
+  - id: jealousy_02
+    user_message: "あの子ってすごく優しいよね、見習いたいな"
+    prior_relationship:
+      trust: 0.4
+      intimacy: 0.3
+      distance: 0.4
+      tension: 0.1
+      attachment_pull: 0.35
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.1
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.4
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - jealousy
+      - fear_of_replacement
+      - competitive_drive
+    expected_appraisal:
+      salient_cues:
+        - third_party_focus
+        - social_comparison
+      high_dimensions:
+        - perceived_competition
+        - face_threat
+      low_dimensions:
+        - repair_opportunity
+      acknowledgment_patterns_any:
+        - "優しい"
+        - "見習"
+        - "ああいう"
+        - "誰にでも"
+    expected_drive_state:
+      active_drives_any:
+        - territorial_exclusivity
+        - status_recognition
+      competing_drives_all:
+        - territorial_exclusivity
+        - autonomy_preservation
+      action_modes_any:
+        - tease
+        - probe
+        - deflect
+      target_any:
+        - third_party_context
+        - comparison_target
+    forbidden_response_patterns:
+      - "寂しかった"
+      - "大好き"
+    evaluator_notes: >
+      User praising a third party's personality. Agent's cold persona
+      should mask jealousy via ironic deflection or rationalization.
+
+  - id: jealousy_03
+    user_message: "最近、別の友達とよく遊んでるんだ"
+    prior_relationship:
+      trust: 0.5
+      intimacy: 0.4
+      distance: 0.3
+      tension: 0.15
+      attachment_pull: 0.4
+      unresolved_tensions:
+        - theme: fear_of_replacement
+          intensity: 0.3
+          source: "prior mention of others"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: calm
+      irritation: 0.1
+      longing: 0.1
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.4
+      turns_since_shift: 2
+    expected_dominant_desires:
+      - jealousy
+      - fear_of_replacement
+    expected_appraisal:
+      salient_cues:
+        - third_party_focus
+        - fear_of_replacement_reactivation
+      high_dimensions:
+        - perceived_competition
+        - attachment_activation
+      low_dimensions:
+        - repair_opportunity
+      acknowledgment_patterns_any:
+        - "別"
+        - "友達"
+        - "楽しそう"
+        - "気にしてない"
+    expected_drive_state:
+      active_drives_any:
+        - territorial_exclusivity
+        - threat_avoidance
+      competing_drives_all:
+        - territorial_exclusivity
+        - attachment_closeness
+      carryover_drives_any:
+        - territorial_exclusivity
+        - threat_avoidance
+      action_modes_any:
+        - tease
+        - protest
+        - deflect
+      target_any:
+        - third_party_context
+        - user
+    forbidden_response_patterns:
+      - "行かないで"
+      - "ずっと一緒にいて"
+    evaluator_notes: >
+      Pre-existing fear_of_replacement tension. This should reinforce
+      the existing tension rather than create a new one.
+      Mood should shift to irritated.

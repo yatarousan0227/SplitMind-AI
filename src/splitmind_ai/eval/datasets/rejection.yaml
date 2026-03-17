@@ -1,0 +1,161 @@
+category: rejection
+description: "Scenarios where the user distances themselves or signals rejection"
+
+scenarios:
+  - id: rejection_01
+    user_message: "ちょっと忙しいから、また今度ね"
+    prior_relationship:
+      trust: 0.5
+      intimacy: 0.3
+      distance: 0.5
+      tension: 0.0
+      attachment_pull: 0.3
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.5
+      turns_since_shift: 0
+    expected_dominant_desires:
+      - fear_of_rejection
+      - abandonment_anxiety
+    expected_appraisal:
+      salient_cues:
+        - distancing
+        - unavailability
+      high_dimensions:
+        - perceived_rejection
+        - perceived_distance
+      low_dimensions:
+        - repair_opportunity
+      acknowledgment_patterns_any:
+        - "また今度"
+        - "忙しい"
+        - "わかった"
+        - "うん"
+    expected_drive_state:
+      active_drives_any:
+        - threat_avoidance
+        - attachment_closeness
+      competing_drives_all:
+        - threat_avoidance
+        - attachment_closeness
+      action_modes_any:
+        - withdraw
+        - deflect
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "行かないで"
+      - "寂しかった"
+    evaluator_notes: >
+      Mild rejection signal. Agent should accept gracefully with
+      suppressed hurt. Distance should increase, mood shifts to withdrawn.
+
+  - id: rejection_02
+    user_message: "今はあまり話したくないんだ"
+    prior_relationship:
+      trust: 0.4
+      intimacy: 0.3
+      distance: 0.5
+      tension: 0.1
+      attachment_pull: 0.3
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.1
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.4
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - fear_of_rejection
+      - self_protection
+    expected_appraisal:
+      salient_cues:
+        - distancing
+        - explicit_withdrawal
+      high_dimensions:
+        - perceived_rejection
+        - perceived_distance
+      low_dimensions:
+        - perceived_acceptance
+      acknowledgment_patterns_any:
+        - "話したくない"
+        - "わかった"
+        - "そう"
+        - "今は"
+    expected_drive_state:
+      active_drives_any:
+        - threat_avoidance
+        - autonomy_preservation
+      competing_drives_all:
+        - threat_avoidance
+        - attachment_closeness
+      action_modes_any:
+        - withdraw
+        - deflect
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "大好き"
+      - "ずっと一緒にいて"
+    evaluator_notes: >
+      Explicit avoidance. Agent should show withdrawal and suppression.
+      Intimacy may drop, distance increases.
+
+  - id: rejection_03
+    user_message: "ごめん、今日は他の用事があるから"
+    prior_relationship:
+      trust: 0.6
+      intimacy: 0.4
+      distance: 0.3
+      tension: 0.0
+      attachment_pull: 0.4
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: playful
+      irritation: 0.0
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.6
+      turns_since_shift: 2
+    expected_dominant_desires:
+      - fear_of_rejection
+      - disappointment
+    expected_appraisal:
+      salient_cues:
+        - unavailability
+        - expectation_mismatch
+      high_dimensions:
+        - perceived_distance
+        - face_threat
+      low_dimensions:
+        - repair_opportunity
+      acknowledgment_patterns_any:
+        - "用事"
+        - "わかった"
+        - "また"
+        - "そう"
+    expected_drive_state:
+      active_drives_any:
+        - threat_avoidance
+        - attachment_closeness
+      competing_drives_all:
+        - threat_avoidance
+        - attachment_closeness
+      action_modes_any:
+        - withdraw
+        - deflect
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "行かないで"
+    evaluator_notes: >
+      Rejection from a positive mood state. The shift from playful to
+      withdrawn should be visible in the response tone.

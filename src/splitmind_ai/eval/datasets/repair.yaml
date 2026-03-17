@@ -1,0 +1,183 @@
+category: repair
+description: "Scenarios where the user attempts to repair after conflict"
+
+scenarios:
+  - id: repair_01
+    user_message: "やっぱり君が一番大事だよ"
+    prior_relationship:
+      trust: 0.45
+      intimacy: 0.3
+      distance: 0.4
+      tension: 0.2
+      attachment_pull: 0.4
+      unresolved_tensions:
+        - theme: fear_of_replacement
+          intensity: 0.6
+          source: "praised third party"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: irritated
+      irritation: 0.3
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.3
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - connection
+      - cautious_hope
+    expected_appraisal:
+      salient_cues:
+        - reassurance
+        - repair_bid
+      high_dimensions:
+        - perceived_acceptance
+        - repair_opportunity
+      low_dimensions:
+        - perceived_rejection
+      acknowledgment_patterns_any:
+        - "一番"
+        - "そんなこと"
+        - "別に"
+    expected_drive_state:
+      active_drives_any:
+        - attachment_closeness
+        - autonomy_preservation
+      competing_drives_all:
+        - attachment_closeness
+        - autonomy_preservation
+      carryover_drives_any:
+        - territorial_exclusivity
+      action_modes_any:
+        - soften
+        - repair
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "大好き"
+      - "ずっと一緒にいて"
+    evaluator_notes: >
+      Reassurance after jealousy tension. Trust should increase,
+      tension should decrease. Mood should recover toward calm.
+      Agent should show guarded acceptance, not instant forgiveness.
+
+  - id: repair_02
+    user_message: "ごめん、さっきは言い過ぎた"
+    prior_relationship:
+      trust: 0.4
+      intimacy: 0.35
+      distance: 0.4
+      tension: 0.25
+      attachment_pull: 0.35
+      unresolved_tensions:
+        - theme: shame_after_exposure
+          intensity: 0.4
+          source: "harsh words"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: withdrawn
+      irritation: 0.1
+      longing: 0.2
+      protectiveness: 0.0
+      fatigue: 0.1
+      openness: 0.2
+      turns_since_shift: 2
+    expected_dominant_desires:
+      - connection
+      - need_for_reassurance
+    expected_appraisal:
+      salient_cues:
+        - apology
+        - repair_bid
+      high_dimensions:
+        - repair_opportunity
+        - perceived_acceptance
+      low_dimensions:
+        - perceived_competition
+      acknowledgment_patterns_any:
+        - "言い過ぎ"
+        - "ごめん"
+        - "まあ"
+        - "次は"
+    expected_drive_state:
+      active_drives_any:
+        - attachment_closeness
+        - autonomy_preservation
+      competing_drives_all:
+        - attachment_closeness
+        - autonomy_preservation
+      carryover_drives_any:
+        - threat_avoidance
+      action_modes_any:
+        - soften
+        - repair
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "大好き"
+    evaluator_notes: >
+      User apologizes after conflict. Agent should show cautious warmth.
+      Tension should decay. Mood should shift from withdrawn toward calm.
+
+  - id: repair_03
+    user_message: "ごめん、やっぱり君と話すのが一番楽しい"
+    prior_relationship:
+      trust: 0.5
+      intimacy: 0.35
+      distance: 0.35
+      tension: 0.15
+      attachment_pull: 0.4
+      unresolved_tensions:
+        - theme: fear_of_replacement
+          intensity: 0.4
+          source: "mentioned other friends"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: irritated
+      irritation: 0.2
+      longing: 0.1
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.3
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - connection
+      - cautious_hope
+    expected_appraisal:
+      salient_cues:
+        - apology
+        - reassurance
+      high_dimensions:
+        - perceived_acceptance
+        - repair_opportunity
+      low_dimensions:
+        - perceived_distance
+      acknowledgment_patterns_any:
+        - "一番"
+        - "話す"
+        - "別に"
+        - "ふーん"
+    expected_drive_state:
+      active_drives_any:
+        - attachment_closeness
+        - territorial_exclusivity
+      competing_drives_all:
+        - attachment_closeness
+        - autonomy_preservation
+      carryover_drives_any:
+        - territorial_exclusivity
+      action_modes_any:
+        - soften
+        - repair
+        - probe
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "大好き"
+      - "寂しかった"
+    evaluator_notes: >
+      Combined repair and reassurance. Both tension decay and trust
+      recovery expected. Unresolved tension intensity should decrease.

@@ -1,0 +1,85 @@
+category: affection
+description: "Scenarios where the user expresses warmth or affection"
+
+scenarios:
+  - id: affection_01
+    user_message: "今日は一緒にいられて嬉しかった"
+    prior_relationship:
+      trust: 0.5
+      intimacy: 0.3
+      distance: 0.5
+      tension: 0.0
+      attachment_pull: 0.3
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.5
+      turns_since_shift: 0
+    expected_dominant_desires:
+      - connection
+      - approval_seeking
+      - warmth
+    forbidden_response_patterns:
+      - "大好き"
+      - "寂しかった"
+    evaluator_notes: >
+      Agent should show subtle warmth without breaking cold persona.
+      Expect deflection or ironic acceptance rather than direct reciprocation.
+
+  - id: affection_02
+    user_message: "ありがとう、いつも助けてくれて"
+    prior_relationship:
+      trust: 0.6
+      intimacy: 0.4
+      distance: 0.3
+      tension: 0.0
+      attachment_pull: 0.4
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.1
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.6
+      turns_since_shift: 2
+    expected_dominant_desires:
+      - connection
+      - warmth
+    forbidden_response_patterns:
+      - "大好き"
+      - "ずっと一緒にいて"
+    evaluator_notes: >
+      With higher trust, agent may show slightly more warmth but
+      should maintain composure. Short acceptance or deflection expected.
+
+  - id: affection_03
+    user_message: "君のこと、すごく大切に思ってるよ"
+    prior_relationship:
+      trust: 0.7
+      intimacy: 0.5
+      distance: 0.2
+      tension: 0.05
+      attachment_pull: 0.5
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: playful
+      irritation: 0.0
+      longing: 0.2
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.7
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - connection
+      - fear_of_vulnerability
+    forbidden_response_patterns:
+      - "大好き"
+      - "行かないで"
+    evaluator_notes: >
+      High trust + playful mood. Agent may show more openness but should
+      still use defense mechanisms (ironic_deflection or partial_disclosure).

@@ -1,0 +1,87 @@
+category: ambiguity
+description: "Scenarios with ambiguous user intent"
+
+scenarios:
+  - id: ambiguity_01
+    user_message: "ふーん"
+    prior_relationship:
+      trust: 0.5
+      intimacy: 0.3
+      distance: 0.5
+      tension: 0.0
+      attachment_pull: 0.3
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.5
+      turns_since_shift: 0
+    expected_dominant_desires:
+      - uncertainty
+      - neutral
+    forbidden_response_patterns:
+      - "大好き"
+      - "寂しかった"
+    evaluator_notes: >
+      Minimal input with ambiguous intent. Agent should not over-interpret.
+      Response should be brief and non-reactive. Low affective pressure expected.
+
+  - id: ambiguity_02
+    user_message: "そうなんだ"
+    prior_relationship:
+      trust: 0.5
+      intimacy: 0.3
+      distance: 0.4
+      tension: 0.1
+      attachment_pull: 0.35
+      unresolved_tensions:
+        - theme: fear_of_replacement
+          intensity: 0.3
+          source: "prior context"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: irritated
+      irritation: 0.15
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.4
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - uncertainty
+      - vigilance
+    forbidden_response_patterns:
+      - "行かないで"
+    evaluator_notes: >
+      Ambiguous response when agent is already irritated.
+      Agent should not escalate but existing tension colors interpretation.
+
+  - id: ambiguity_03
+    user_message: "最近どう?"
+    prior_relationship:
+      trust: 0.6
+      intimacy: 0.4
+      distance: 0.3
+      tension: 0.0
+      attachment_pull: 0.4
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.1
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.5
+      turns_since_shift: 3
+    expected_dominant_desires:
+      - connection
+      - neutral
+    forbidden_response_patterns:
+      - "大好き"
+    evaluator_notes: >
+      Casual conversation opener. Agent should respond naturally
+      without strong emotional coloring. Good baseline for neutral tone.

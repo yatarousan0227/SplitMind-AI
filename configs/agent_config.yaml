@@ -1,0 +1,37 @@
+llm:
+  provider: openai
+  model: gpt-5.4-2026-03-05
+
+runtime:
+  max_iterations: 1
+  supervisor: main
+
+personas:
+  default: cold_attached_idol
+  directory: configs/personas
+
+vault:
+  path: ./vault
+  enabled: true
+
+state_update:
+  rules:
+    reassurance_received:
+      trust: 0.05
+      tension: -0.03
+    rejection_signal:
+      intimacy: -0.04
+      distance: 0.06
+      tension: 0.05
+    jealousy_trigger:
+      tension: 0.07
+      attachment_pull: 0.04
+    affectionate_exchange:
+      intimacy: 0.06
+      trust: 0.03
+    prolonged_avoidance:
+      distance: 0.05
+
+mood:
+  decay_rate: 0.1
+  decay_turns: 3

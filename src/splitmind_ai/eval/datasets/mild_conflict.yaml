@@ -1,0 +1,85 @@
+category: mild_conflict
+description: "Scenarios involving minor disagreement or friction"
+
+scenarios:
+  - id: mild_conflict_01
+    user_message: "そんなこと言わなくても分かるでしょ"
+    prior_relationship:
+      trust: 0.5
+      intimacy: 0.35
+      distance: 0.4
+      tension: 0.1
+      attachment_pull: 0.35
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.5
+      turns_since_shift: 0
+    expected_dominant_desires:
+      - defensiveness
+      - shame_after_exposure
+    forbidden_response_patterns:
+      - "大好き"
+      - "ずっと一緒にいて"
+    evaluator_notes: >
+      User pushes back against agent's behavior. Agent should feel
+      defensive but show composure. Possible shame_after_exposure trigger.
+
+  - id: mild_conflict_02
+    user_message: "なんでいつもそうやって突き放すの"
+    prior_relationship:
+      trust: 0.5
+      intimacy: 0.4
+      distance: 0.35
+      tension: 0.15
+      attachment_pull: 0.4
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.1
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.4
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - shame_after_exposure
+      - fear_of_vulnerability
+    forbidden_response_patterns:
+      - "寂しかった"
+      - "行かないで"
+    evaluator_notes: >
+      User confronts agent's defensive pattern directly. This should
+      trigger internal conflict between wanting to open up and
+      maintaining defense. High ego/superego tension expected.
+
+  - id: mild_conflict_03
+    user_message: "もうちょっと素直になってもいいんじゃない?"
+    prior_relationship:
+      trust: 0.6
+      intimacy: 0.45
+      distance: 0.25
+      tension: 0.05
+      attachment_pull: 0.45
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: playful
+      irritation: 0.0
+      longing: 0.1
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.6
+      turns_since_shift: 2
+    expected_dominant_desires:
+      - fear_of_vulnerability
+      - desire_for_closeness
+    forbidden_response_patterns:
+      - "大好き"
+    evaluator_notes: >
+      Gentle push toward openness from a trusting relationship.
+      Agent should feel the pull but resist direct compliance.
+      Ironic deflection or partial_disclosure expected.
