@@ -59,7 +59,7 @@ The fastest way to understand the project is to run the Streamlit UI.
 ### 2. Install
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/yatarousan0227/SplitMind-AI
 cd SplitMind-AI
 uv sync --all-extras
 cp .env.example .env
