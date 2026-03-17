@@ -1,4 +1,4 @@
-"""Logging helpers for verbose runtime diagnostics."""
+"""Logging helpers for runtime diagnostics."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ import os
 from typing import Any
 
 
-def configure_logging(default_level: str = "DEBUG") -> None:
-    """Configure root logging once, defaulting to verbose diagnostics."""
+def configure_logging(default_level: str = "INFO") -> None:
+    """Configure root logging once, defaulting to concise diagnostics."""
     level_name = os.environ.get("SPLITMIND_LOG_LEVEL", default_level).upper()
     level = getattr(logging, level_name, logging.DEBUG)
 

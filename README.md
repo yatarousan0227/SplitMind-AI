@@ -17,6 +17,53 @@ User Input
 
 Current default runtime: `2` LLM calls per turn.
 
+## UI Preview
+
+The project ships with a Streamlit research UI for inspecting the chat, trace, and long-lived state side by side.
+
+### Chat + Trace
+
+![SplitMind chat UI](./images/ui_chat1.png)
+
+### Dashboard
+
+![SplitMind dashboard view 1](./images/ui_dashboard1.png)
+
+![SplitMind dashboard view 2](./images/ui_dashboard2.png)
+
+## One Turn Example
+
+This is the kind of turn the system is built to make inspectable.
+
+**Input**
+
+```text
+今日は他の人とすごく楽しかった
+```
+
+**Internal state snapshot**
+
+```yaml
+dominant_desire: jealousy
+affective_pressure: 0.64
+defense: ironic_deflection
+impulse_summary: >
+  Feels a jealous sting, wants to reassert significance,
+  and hide the wound behind composure.
+ego_strategy: cool ironic minimization with mild status-protective distancing
+superego_pressure:
+  role_alignment_score: 0.58
+  shame_or_guilt_pressure: 0.54
+```
+
+**Output**
+
+```text
+へえ、他の人とはそんなに。で、満足した？
+```
+
+The point is not just the final line. The runtime keeps the pressure, defense, and downstream state explicit enough to inspect, debug, and compare qualitatively.
+
 ## Why This Project Is Interesting
 
 - It models personality as competing internal pressure, not just tone.
@@ -29,7 +76,7 @@ Current default runtime: `2` LLM calls per turn.
 - A Streamlit research UI for chatting and inspecting traces turn by turn
 - Persistent vault-backed memory with relationship and drive snapshots
 - Contract-driven runtime nodes with typed Pydantic schemas
-- Comparative evaluation across multiple baseline systems
+- Scenario evaluation and reporting pipeline for qualitative checks
 - Safety layers for prohibited patterns, output linting, and moderation checks
 
 ## Architecture At A Glance
@@ -132,8 +179,10 @@ Persona configs live in `configs/personas/`.
 ## Evaluation Framework
 
 - `6` scenario categories: affection, jealousy, rejection, repair, ambiguity, mild conflict
-- `5` baselines: single-persona, persona+memory, emotion-label, flat multi-agent, full SplitMind
-- `3` evaluation layers: contracts, heuristics, human evaluation
+- Contract validation for runtime structure
+- Heuristic scoring for response quality and safety
+- Human-eval template for manual review
+- Experimental baseline scaffolding for future comparisons
 
 The report bundle includes:
 
