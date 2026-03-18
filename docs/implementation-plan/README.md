@@ -23,6 +23,11 @@
 
 そのうえで、`agent-contracts` の contract 駆動設計を利用し、役割境界・状態依存・トレースを明示する。
 
+注記:
+- 上の 2-call 方針は初期 MVP の前提であり、現行実装は Phase 9 まで進んでいる
+- 現在の標準 runtime は `InternalDynamicsNode -> PersonaSupervisorNode -> SurfaceRealizationNode` の 3-call 構成
+- `SurfaceStateNode`、`SelectionCriticNode`、`relationship_pacing` が既定 runtime に組み込まれている
+
 ## 2. agent-contracts 前提
 
 `agent-contracts` は `NodeContract` でノードの reads / writes / trigger conditions を宣言し、registry から LangGraph を自動構築するライブラリである。今回の計画では特に次を前提とする。
@@ -178,7 +183,42 @@ appraisal / action policy / memory をまたぐ駆動系へ引き上げる。
 
 詳細: [`08-drive-and-instinct-loop.md`](08-drive-and-instinct-loop.md)
 
+### Phase 9
+
+感情の漏れはあるが、最終文面が均整化されすぎて AI 臭くなる問題を抑え、
+人間らしい雑味と恋愛会話の pace control を強める。
+
+焦点:
+- surface state の導入
+- `PersonaSupervisor` から最終文面決定責務を外す再分割
+- candidate planning / realization / critic の分離
+- turn 間の表出履歴管理
+- relationship pacing の状態化
+
+詳細: [`09-human-roughness-and-relationship-pacing.md`](./09-human-roughness-and-relationship-pacing.md)
+
+実装チェックリスト: [`09-implementation-tasklist.md`](./09-implementation-tasklist.md)
+
+進捗:
+- Task Group 1-7: 実装済み
+- runtime / UI / eval / docs まで Phase 9 前提へ更新済み
+- 定性 QA 手順: [`docs/eval/phase9-qualitative-qa.md`](../eval/phase9-qualitative-qa.md)
+
 ## 5. 推奨ディレクトリ構成
+
+### Phase 14
+
+ペルソナ差分が序盤では出るのに、repair / re-commitment 局面で flattening する問題を、
+表層調整ではなく algorithm と state 設計の問題として解き直す。
+
+焦点:
+- persona-specific relational policy の導入
+- ego move の family / style 分解
+- residue persistence の状態化
+- repair 専用 policy layer の追加
+- fidelity gate における persona flattening 検出
+
+詳細: [`14-persona-separation-architecture.md`](./14-persona-separation-architecture.md)
 
 初期実装では以下を推奨する。
 

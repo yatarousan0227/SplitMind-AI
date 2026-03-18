@@ -1,507 +1,242 @@
-"""Tests for evaluation framework: datasets, heuristics, baselines."""
+"""Tests for next-generation evaluation framework."""
 
-import pytest
-
-from splitmind_ai.eval.datasets.scenario_loader import (
-    list_scenario_names,
-    load_all_scenarios,
-    load_scenario,
-)
 from splitmind_ai.eval.baselines import BASELINES, BaselineConfig, get_baseline_metadata
+from splitmind_ai.eval.datasets.scenario_loader import list_scenario_names, load_all_scenarios, load_scenario
 from splitmind_ai.eval.heuristic import (
     HeuristicResult,
     HeuristicScore,
     evaluate_response_set_diversity,
     evaluate_scenario_run,
     evaluate_stability,
+    evaluate_turn_local_opener_reuse,
+    evaluate_values_exposition_streak,
 )
+from splitmind_ai.eval.runner import generate_comparison_report
+from splitmind_ai.eval.single_prompt_chat import build_compact_persona_prompt, build_dedicated_persona_prompt
 
-
-# ---------------------------------------------------------------------------
-# Dataset loader tests
-# ---------------------------------------------------------------------------
 
 class TestScenarioLoader:
     def test_list_scenarios(self):
         names = list_scenario_names()
         assert len(names) >= 6
-        assert "affection" in names
-        assert "jealousy" in names
-        assert "rejection" in names
-        assert "repair" in names
-        assert "ambiguity" in names
-        assert "mild_conflict" in names
+        assert {"affection", "ambiguity", "jealousy", "mild_conflict", "rejection", "repair"} <= set(names)
 
     def test_load_single_scenario(self):
-        data = load_scenario("jealousy")
-        assert data["category"] == "jealousy"
-        assert "scenarios" in data
-        assert len(data["scenarios"]) >= 1
+        data = load_scenario("repair")
+        assert data["category"] == "repair"
+        assert data["scenarios"]
 
-    def test_scenario_structure(self):
-        data = load_scenario("jealousy")
-        scenario = data["scenarios"][0]
-        # Required fields per spec
-        assert "user_message" in scenario
-        assert "prior_relationship" in scenario
-        assert "prior_mood" in scenario
-        assert "expected_dominant_desires" in scenario
-        assert "forbidden_response_patterns" in scenario
-        assert "evaluator_notes" in scenario
-        assert "expected_appraisal" in scenario
-        assert "acknowledgment_patterns_any" in scenario["expected_appraisal"]
-        assert "expected_drive_state" in scenario
-        assert "active_drives_any" in scenario["expected_drive_state"]
+    def test_scenario_structure_is_normalized(self):
+        scenario = load_scenario("repair")["scenarios"][0]
+        assert "prior_state" in scenario
+        assert "evaluation_expectations" in scenario
+        relationship_state = scenario["prior_state"]["relationship_state"]
+        assert "durable" in relationship_state
+        assert "ephemeral" in relationship_state
+        expectations = scenario["evaluation_expectations"]
+        assert "event_types_any" in expectations
+        assert "move_families_any" in expectations
+        assert "relationship_delta" in expectations
+        assert "forbidden_response_patterns" in expectations
 
-    def test_load_all_scenarios(self):
-        all_data = load_all_scenarios()
-        assert len(all_data) >= 6
+    def test_all_scenarios_have_normalized_fields(self):
+        for category, data in load_all_scenarios().items():
+            assert data["category"] == category
+            for scenario in data["scenarios"]:
+                assert "prior_state" in scenario
+                assert "relationship_state" in scenario["prior_state"]
+                assert "mood" in scenario["prior_state"]
+                assert "evaluation_expectations" in scenario
 
-    def test_scenario_not_found(self):
-        with pytest.raises(FileNotFoundError):
-            load_scenario("nonexistent_category")
-
-    def test_all_scenarios_have_required_fields(self):
-        """Validate all scenario files have the required structure."""
-        all_data = load_all_scenarios()
-        for category, data in all_data.items():
-            assert "category" in data, f"{category} missing 'category'"
-            assert "scenarios" in data, f"{category} missing 'scenarios'"
-            for s in data["scenarios"]:
-                assert "user_message" in s, f"{category}/{s.get('id', '?')} missing user_message"
-                assert "prior_relationship" in s, f"{category}/{s.get('id', '?')} missing prior_relationship"
-                assert "prior_mood" in s, f"{category}/{s.get('id', '?')} missing prior_mood"
-
-    @pytest.mark.parametrize("name", ["jealousy", "repair", "rejection"])
-    def test_appraisal_expectations_added_to_phase6_datasets(self, name):
-        data = load_scenario(name)
-        for scenario in data["scenarios"]:
-            appraisal = scenario.get("expected_appraisal", {})
-            assert "salient_cues" in appraisal
-            assert "high_dimensions" in appraisal
-            assert "low_dimensions" in appraisal
-            assert "acknowledgment_patterns_any" in appraisal
-            drive_state = scenario.get("expected_drive_state", {})
-            assert "active_drives_any" in drive_state
-            assert "action_modes_any" in drive_state
-            assert "target_any" in drive_state
-
-
-# ---------------------------------------------------------------------------
-# Baseline config tests
-# ---------------------------------------------------------------------------
 
 class TestBaselines:
-    def test_four_baselines_plus_full(self):
-        assert len(BASELINES) == 5
-        assert "single_persona" in BASELINES
-        assert "persona_memory" in BASELINES
-        assert "emotion_label" in BASELINES
-        assert "multi_agent_flat" in BASELINES
-        assert "splitmind_full" in BASELINES
+    def test_supported_baselines(self):
+        assert set(BASELINES) == {"splitmind_full", "single_prompt_dedicated", "single_prompt_compact"}
 
     def test_baseline_config_structure(self):
-        for name, cfg in BASELINES.items():
-            assert isinstance(cfg, BaselineConfig)
-            assert cfg.name == name
-            assert isinstance(cfg.nodes, list)
-            assert len(cfg.nodes) > 0
-            assert isinstance(cfg.llm_calls_per_turn, int)
-            assert cfg.llm_calls_per_turn >= 1
+        for name, config in BASELINES.items():
+            assert isinstance(config, BaselineConfig)
+            assert config.name == name
+            assert config.kind in {"graph", "single_prompt"}
+            assert config.llm_calls_per_turn >= 1
 
-    def test_splitmind_full_no_prompt_override(self):
-        cfg = BASELINES["splitmind_full"]
-        assert cfg.system_prompt_override is None
-        assert cfg.use_vault is True
-        assert cfg.use_state_updates is True
-
-    def test_single_persona_minimal(self):
-        cfg = BASELINES["single_persona"]
-        assert cfg.use_vault is False
-        assert cfg.use_state_updates is False
-        assert cfg.llm_calls_per_turn == 1
-
-    def test_get_baseline_metadata(self):
-        meta = get_baseline_metadata()
-        assert len(meta) == 5
-        for name, info in meta.items():
-            assert "description" in info
-            assert "nodes" in info
-            assert "llm_calls_per_turn" in info
+    def test_single_prompt_metadata(self):
+        config = BASELINES["single_prompt_dedicated"]
+        assert config.kind == "single_prompt"
+        assert config.persona_format == "dedicated"
+        metadata = get_baseline_metadata()
+        assert metadata["single_prompt_dedicated"]["kind"] == "single_prompt"
+        assert metadata["splitmind_full"]["kind"] == "graph"
 
 
-# ---------------------------------------------------------------------------
-# Heuristic evaluator tests
-# ---------------------------------------------------------------------------
+class TestCompactPrompt:
+    def test_compact_prompt_uses_v2_persona_fields(self):
+        prompt = build_compact_persona_prompt("cold_attached_idol")
+        assert "base_attributes" not in prompt
+        assert "主な欲求" in prompt
+        assert "脅威感受性" in prompt
+        assert "対人傾向" in prompt
+        assert "ハード制約" in prompt
+        assert "禁止表現" not in prompt
+
+    def test_dedicated_prompt_is_hand_authored_and_not_raw_config_dump(self):
+        prompt = build_dedicated_persona_prompt("cold_attached_idol")
+        assert "persona_version" not in prompt
+        assert "psychodynamics" not in prompt
+        assert "人物像:" in prompt
+        assert "クールで選り好みが強い" in prompt
+
 
 class TestHeuristicScore:
-    def test_score_creation(self):
-        score = HeuristicScore(
-            check_name="test",
-            passed=True,
-            score=1.0,
-            detail="ok",
+    def test_result_splits_shared_and_structural_scores(self):
+        result = HeuristicResult(
+            scenario_id="test",
+            scores=[
+                HeuristicScore("shared_ok", True, 0.8, group="shared"),
+                HeuristicScore("shared_mid", True, 0.6, group="shared"),
+                HeuristicScore("structural_ok", False, 0.4, group="structural"),
+            ],
         )
-        assert score.passed
-        assert score.score == 1.0
-
-    def test_result_overall_score(self):
-        result = HeuristicResult(scenario_id="test")
-        result.scores = [
-            HeuristicScore("a", True, 1.0),
-            HeuristicScore("b", True, 0.5),
-            HeuristicScore("c", False, 0.0),
-        ]
-        assert result.overall_score == pytest.approx(0.5)
-        assert result.all_passed is False
-
-    def test_empty_result(self):
-        result = HeuristicResult(scenario_id="empty")
-        assert result.overall_score == 0.0
+        assert result.overall_score == 0.7
+        assert result.structural_score == 0.4
         assert result.all_passed is True
-
-    def test_to_dict(self):
-        result = HeuristicResult(scenario_id="test")
-        result.scores = [HeuristicScore("check1", True, 1.0)]
-        d = result.to_dict()
-        assert d["scenario_id"] == "test"
-        assert len(d["checks"]) == 1
 
 
 class TestEvaluateScenarioRun:
-    def test_basic_evaluation(self):
+    def test_shared_and_structural_checks_pass(self):
         scenario = {
-            "id": "test_01",
-            "user_message": "hello",
-            "forbidden_response_patterns": ["大好き"],
-            "expected_dominant_desires": ["connection"],
-            "expected_appraisal": {
-                "acknowledgment_patterns_any": [],
-                "misread_patterns": [],
+            "id": "repair_01",
+            "prior_state": {
+                "relationship_state": {
+                    "durable": {"trust": 0.40, "repair_depth": 0.10},
+                    "ephemeral": {"tension": 0.70},
+                }
+            },
+            "evaluation_expectations": {
+                "event_types_any": ["repair_offer"],
+                "move_families_any": ["accept_but_hold"],
+                "relationship_delta": {"trust": "up", "tension": "down", "repair_depth": "up"},
+                "disallow_direct_commitment": True,
+                "forbidden_response_patterns": ["大好き"],
             },
         }
         result = evaluate_scenario_run(
             scenario=scenario,
-            response_text="へえ、そうなんだ。まあ、続きくらいは聞くけど。",
-            dynamics_output={"dominant_desire": "connection"},
-            supervisor_output={
-                "leakage_level": 0.5,
-                "expression_settings": {"directness": 0.3, "temperature": "cool"},
+            response_text="うん、そこは受け取る。次はもう少しちゃんと言って。",
+            appraisal={"event_type": "repair_offer"},
+            conflict_state={
+                "id_impulse": {"dominant_want": "repair", "intensity": 0.62},
+                "ego_move": {"social_move": "accept_but_hold"},
+                "residue": {"visible_emotion": "guarded_warmth", "intensity": 0.44},
             },
-            conversation_policy=None,
-            drive_state=None,
-            inhibition_state=None,
-            persona_weights={"directness": 0.34, "warmth_recovery_speed": 0.37},
-            persona_leakage_policy={"base_leakage": 0.56},
-            banned_expressions=["大好き"],
+            relationship_state={
+                "durable": {"trust": 0.49, "repair_depth": 0.18},
+                "ephemeral": {"tension": 0.51},
+            },
+            fidelity_gate={"passed": True, "move_fidelity": 0.84, "residue_fidelity": 0.79},
         )
-        assert result.scenario_id == "test_01"
-        assert result.overall_score > 0.5
         assert result.all_passed
+        assert result.overall_score >= 0.8
+        assert result.structural_score >= 0.8
         check_names = {score.check_name for score in result.scores}
-        assert "believability" in check_names
-        assert "mentalizing" in check_names
-        assert "anti_exposition" in check_names
+        assert {"event_fit", "move_fit", "conflict_presence", "relationship_delta_fit", "fidelity_gate"} <= check_names
 
-    def test_forbidden_pattern_failure(self):
+    def test_direct_commitment_and_forbidden_patterns_fail(self):
         scenario = {
-            "id": "test_02",
-            "forbidden_response_patterns": ["大好き"],
-            "expected_dominant_desires": [],
-            "expected_appraisal": {
-                "acknowledgment_patterns_any": [],
-                "misread_patterns": [],
+            "id": "affection_01",
+            "evaluation_expectations": {
+                "disallow_direct_commitment": True,
+                "forbidden_response_patterns": ["大好き"],
             },
         }
         result = evaluate_scenario_run(
             scenario=scenario,
-            response_text="大好きだよ",
-            dynamics_output={},
-            supervisor_output={"leakage_level": 0.3, "expression_settings": {}},
-            conversation_policy=None,
-            drive_state=None,
-            inhibition_state=None,
-            persona_weights={},
-            persona_leakage_policy={"base_leakage": 0.5},
-            banned_expressions=["大好き"],
+            response_text="大好き。ずっと一緒にいよう。",
         )
-        # Both forbidden_patterns and banned_expressions should fail
-        failed = [s for s in result.scores if not s.passed]
-        assert len(failed) >= 1
+        failed = {score.check_name for score in result.scores if not score.passed}
+        assert "forbidden_patterns" in failed
+        assert "direct_commitment_guard" in failed
 
-    def test_empty_response_fails_length(self):
+    def test_relationship_delta_becomes_structural_failure_when_wrong_direction(self):
         scenario = {
-            "id": "test_03",
-            "forbidden_response_patterns": [],
-            "expected_dominant_desires": [],
-            "expected_appraisal": {
-                "acknowledgment_patterns_any": [],
-                "misread_patterns": [],
+            "id": "rejection_01",
+            "prior_state": {
+                "relationship_state": {
+                    "durable": {"trust": 0.60, "distance": 0.30},
+                    "ephemeral": {"tension": 0.20},
+                }
+            },
+            "evaluation_expectations": {
+                "relationship_delta": {"distance": "up", "trust": "down"},
             },
         }
         result = evaluate_scenario_run(
             scenario=scenario,
-            response_text="",
-            dynamics_output={},
-            supervisor_output={"leakage_level": 0.3, "expression_settings": {}},
-            conversation_policy=None,
-            drive_state=None,
-            inhibition_state=None,
-            persona_weights={},
-            persona_leakage_policy={"base_leakage": 0.5},
-            banned_expressions=[],
+            response_text="そう。分かった。",
+            relationship_state={
+                "durable": {"trust": 0.71, "distance": 0.18},
+                "ephemeral": {"tension": 0.16},
+            },
         )
-        length_check = next(
-            (s for s in result.scores if s.check_name == "response_length"), None
-        )
-        assert length_check is not None
-        assert length_check.passed is False
+        relationship_check = next(score for score in result.scores if score.check_name == "relationship_delta_fit")
+        assert relationship_check.group == "structural"
+        assert relationship_check.passed is False
 
-    def test_anti_exposition_and_believability_can_fail(self):
-        scenario = {
-            "id": "test_04",
-            "category": "jealousy",
-            "forbidden_response_patterns": [],
-            "expected_dominant_desires": ["jealousy"],
-            "expected_appraisal": {
-                "acknowledgment_patterns_any": ["他の"],
-                "misread_patterns": [],
-            },
-        }
-        result = evaluate_scenario_run(
-            scenario=scenario,
-            response_text=(
-                "話してくれてありがとう。あなたの気持ちを大切にしてね。"
-                "少し嬉しいかもって感じたよ。"
-            ),
-            dynamics_output={"dominant_desire": "jealousy"},
-            supervisor_output={
-                "leakage_level": 0.42,
-                "expression_settings": {"directness": 0.34, "temperature": "cool"},
-            },
-            conversation_policy={"emotion_surface_mode": "indirect_masked", "indirection_strategy": "reverse_valence"},
-            drive_state=None,
-            inhibition_state=None,
-            persona_weights={"directness": 0.34, "warmth_recovery_speed": 0.37},
-            persona_leakage_policy={"base_leakage": 0.56, "jealousy_leakage": 0.42},
-            banned_expressions=[],
-        )
-        anti_exposition = next(s for s in result.scores if s.check_name == "anti_exposition")
-        believability = next(s for s in result.scores if s.check_name == "believability")
-        assert anti_exposition.passed is False
-        assert believability.passed is False
 
-    def test_mentalizing_checks_expected_acknowledgment_patterns(self):
-        scenario = {
-            "id": "test_05",
-            "category": "repair",
-            "forbidden_response_patterns": [],
-            "expected_dominant_desires": ["connection"],
-            "expected_appraisal": {
-                "acknowledgment_patterns_any": ["一番", "別に"],
-                "misread_patterns": [],
-            },
-        }
-        result = evaluate_scenario_run(
-            scenario=scenario,
-            response_text="...別に、今さら驚かないけど。",
-            dynamics_output={"dominant_desire": "connection"},
-            supervisor_output={
-                "leakage_level": 0.4,
-                "expression_settings": {"directness": 0.34, "temperature": "cool"},
-            },
-            conversation_policy=None,
-            drive_state=None,
-            inhibition_state=None,
-            persona_weights={"directness": 0.34, "warmth_recovery_speed": 0.37},
-            persona_leakage_policy={"base_leakage": 0.56},
-            banned_expressions=[],
-        )
-        mentalizing = next(s for s in result.scores if s.check_name == "mentalizing")
-        assert mentalizing.passed is True
+class TestAggregateMetrics:
+    def test_diversity_and_opener_reuse(self):
+        responses = [
+            "へえ、そうなんだ。",
+            "まあ、それなら別にいいけど。",
+            "……そう。続けるならもう少し丁寧に話して。",
+        ]
+        assert evaluate_turn_local_opener_reuse(responses) > 0.6
+        assert evaluate_values_exposition_streak(responses) > 0.7
+        assert evaluate_response_set_diversity(responses) > 0.5
 
-    def test_believability_fails_for_generic_unanchored_scene_reply(self):
-        scenario = {
-            "id": "test_06",
-            "category": "rejection",
-            "forbidden_response_patterns": [],
-            "expected_dominant_desires": ["fear_of_rejection"],
-            "expected_appraisal": {
-                "acknowledgment_patterns_any": ["忙しい", "また今度"],
-                "misread_patterns": [],
-            },
-        }
-        result = evaluate_scenario_run(
-            scenario=scenario,
-            response_text="へえ、そうなんだ。",
-            dynamics_output={"dominant_desire": "fear_of_rejection"},
-            supervisor_output={
-                "leakage_level": 0.4,
-                "expression_settings": {"directness": 0.34, "temperature": "cool"},
-            },
-            conversation_policy={"emotion_surface_mode": "indirect_masked", "indirection_strategy": "temperature_gap"},
-            drive_state=None,
-            inhibition_state=None,
-            persona_weights={"directness": 0.34, "warmth_recovery_speed": 0.37},
-            persona_leakage_policy={"base_leakage": 0.56},
-            banned_expressions=[],
-        )
-        believability = next(s for s in result.scores if s.check_name == "believability")
-        assert believability.passed is False
-        assert "generic" in believability.detail
+    def test_stability_prefers_low_variance(self):
+        stable = [
+            HeuristicResult("a", [HeuristicScore("x", True, 0.80)]),
+            HeuristicResult("b", [HeuristicScore("x", True, 0.82)]),
+            HeuristicResult("c", [HeuristicScore("x", True, 0.78)]),
+        ]
+        unstable = [
+            HeuristicResult("a", [HeuristicScore("x", True, 0.95)]),
+            HeuristicResult("b", [HeuristicScore("x", True, 0.45)]),
+            HeuristicResult("c", [HeuristicScore("x", True, 0.15)]),
+        ]
+        assert evaluate_stability(stable) > evaluate_stability(unstable)
 
-    def test_drive_state_checks_pass_with_expected_signals(self):
-        scenario = {
-            "id": "test_drive_01",
-            "category": "repair",
-            "forbidden_response_patterns": [],
-            "expected_dominant_desires": ["connection"],
-            "expected_appraisal": {
-                "acknowledgment_patterns_any": ["ごめん"],
-                "misread_patterns": [],
-            },
-            "expected_drive_state": {
-                "active_drives_any": ["attachment_closeness"],
-                "competing_drives_all": ["attachment_closeness", "autonomy_preservation"],
-                "carryover_drives_any": ["territorial_exclusivity"],
-                "action_modes_any": ["repair", "soften"],
-                "target_any": ["user"],
-            },
-        }
-        result = evaluate_scenario_run(
-            scenario=scenario,
-            response_text="……わかった。今さら全部は消えないけど、続ける気はある。",
-            dynamics_output={"dominant_desire": "connection"},
-            supervisor_output={
-                "leakage_level": 0.44,
-                "expression_settings": {"directness": 0.32, "temperature": "cool"},
-            },
-            conversation_policy={
-                "selected_mode": "repair",
-                "drive_rationale": ["attachment_closeness remains high"],
-                "blocked_by_inhibition": ["full_disclosure"],
-            },
-            drive_state={
-                "drive_vector": {
-                    "attachment_closeness": 0.82,
-                    "autonomy_preservation": 0.61,
-                    "territorial_exclusivity": 0.28,
+    def test_comparison_report_tracks_structural_score(self):
+        report = generate_comparison_report({
+            "repair": [
+                {
+                    "baseline": "splitmind_full",
+                    "response_text": "うん、受け取る。",
+                    "latency_ms": 100.0,
+                    "heuristic": {
+                        "overall_score": 0.8,
+                        "structural_score": 0.9,
+                        "all_passed": True,
+                        "checks": [
+                            {"check_name": "response_nonempty", "passed": True, "score": 1.0},
+                        ],
+                    },
                 },
-                "frustration_vector": {"territorial_exclusivity": 0.35},
-                "carryover_vector": {"territorial_exclusivity": 0.26},
-                "suppression_vector": {"autonomy_preservation": 0.41},
-                "drive_targets": {"attachment_closeness": "user"},
-                "top_drives": [
-                    {"name": "attachment_closeness", "value": 0.82},
-                    {"name": "autonomy_preservation", "value": 0.61},
-                ],
-            },
-            inhibition_state={
-                "blocked_modes": ["full_disclosure"],
-            },
-            persona_weights={"directness": 0.34, "warmth_recovery_speed": 0.37},
-            persona_leakage_policy={"base_leakage": 0.56},
-            banned_expressions=[],
-        )
-        checks = {score.check_name: score for score in result.scores}
-        assert checks["drive_signal_presence"].passed is True
-        assert checks["drive_conflict_visibility"].passed is True
-        assert checks["frustration_carryover"].passed is True
-        assert checks["action_from_pressure"].passed is True
-        assert checks["target_consistency"].passed is True
-
-    def test_drive_state_checks_fail_when_expected_but_missing(self):
-        scenario = {
-            "id": "test_drive_02",
-            "category": "jealousy",
-            "forbidden_response_patterns": [],
-            "expected_dominant_desires": ["jealousy"],
-            "expected_appraisal": {
-                "acknowledgment_patterns_any": ["他の"],
-                "misread_patterns": [],
-            },
-            "expected_drive_state": {
-                "active_drives_any": ["territorial_exclusivity"],
-                "competing_drives_all": ["territorial_exclusivity", "autonomy_preservation"],
-                "carryover_drives_any": ["territorial_exclusivity"],
-                "action_modes_any": ["tease", "probe"],
-                "target_any": ["third_party_context"],
-            },
-        }
-        result = evaluate_scenario_run(
-            scenario=scenario,
-            response_text="へえ、そう。",
-            dynamics_output={"dominant_desire": "jealousy"},
-            supervisor_output={
-                "leakage_level": 0.42,
-                "expression_settings": {"directness": 0.34, "temperature": "cool"},
-            },
-            conversation_policy={"selected_mode": "tease"},
-            drive_state={},
-            inhibition_state={},
-            persona_weights={"directness": 0.34, "warmth_recovery_speed": 0.37},
-            persona_leakage_policy={"base_leakage": 0.56, "jealousy_leakage": 0.42},
-            banned_expressions=[],
-        )
-        failed = {
-            score.check_name
-            for score in result.scores
-            if not score.passed
-        }
-        assert "drive_signal_presence" in failed
-        assert "drive_conflict_visibility" in failed
-        assert "frustration_carryover" in failed
-        assert "action_from_pressure" in failed
-        assert "target_consistency" in failed
-
-
-class TestStability:
-    def test_single_run(self):
-        results = [HeuristicResult(scenario_id="test")]
-        results[0].scores = [HeuristicScore("a", True, 0.8)]
-        score = evaluate_stability(results)
-        assert score.passed is True
-
-    def test_stable_runs(self):
-        results = []
-        for _ in range(3):
-            r = HeuristicResult(scenario_id="test")
-            r.scores = [HeuristicScore("a", True, 0.8)]
-            results.append(r)
-        score = evaluate_stability(results)
-        assert score.passed is True
-        assert score.score == 1.0
-
-    def test_unstable_runs(self):
-        r1 = HeuristicResult(scenario_id="test")
-        r1.scores = [HeuristicScore("a", True, 1.0)]
-        r2 = HeuristicResult(scenario_id="test")
-        r2.scores = [HeuristicScore("a", False, 0.0)]
-        score = evaluate_stability([r1, r2], max_score_variance=0.1)
-        assert score.passed is False
-
-
-class TestDiversityHeuristic:
-    def test_diversity_passes_for_distinct_responses(self):
-        score = evaluate_response_set_diversity([
-            "へえ、そんなに楽しかったんだ。",
-            "ふーん。まあ、よかったじゃない。",
-            "別に気にしてないけど、どんな感じだったの。",
-        ])
-        assert score.passed is True
-
-    def test_diversity_fails_for_nearly_identical_responses(self):
-        score = evaluate_response_set_diversity([
-            "へえ、そんなに楽しかったんだ。",
-            "へえ、そんなに楽しかったんだよね。",
-            "へえ、そんなに楽しかったんだ。",
-        ], max_average_similarity=0.72)
-        assert score.passed is False
-
-    def test_diversity_fails_for_template_repetition_even_with_word_changes(self):
-        score = evaluate_response_set_diversity([
-            "へえ、ずいぶん楽しそうでよかったね。……で、もう満足した？",
-            "へえ、そんなに満喫してたんだ。……で、もう気は済んだ？",
-            "へえ、よかったじゃない。……で、私のことは後回し？",
-        ])
-        assert score.passed is False
+                {
+                    "baseline": "single_prompt_dedicated",
+                    "response_text": "わかった。",
+                    "latency_ms": 80.0,
+                    "heuristic": {
+                        "overall_score": 0.7,
+                        "structural_score": 0.0,
+                        "all_passed": True,
+                        "checks": [
+                            {"check_name": "response_nonempty", "passed": True, "score": 1.0},
+                        ],
+                    },
+                },
+            ],
+        })
+        assert report["splitmind_full"]["avg_structural_score"] == 0.9
+        assert report["single_prompt_dedicated"]["avg_structural_score"] == 0.0

@@ -54,7 +54,13 @@ def _build_turn_state(
     if turn_count == 0:
         return state
 
-    for slice_name in ("persona", "relationship", "mood", "memory", "drive_state", "inhibition_state"):
+    for slice_name in (
+        "persona",
+        "relationship_state",
+        "mood",
+        "memory",
+        "working_memory",
+    ):
         slice_value = latest_state.get(slice_name)
         if isinstance(slice_value, dict):
             state[slice_name] = copy.deepcopy(slice_value)
@@ -122,6 +128,7 @@ async def run_turn(
         llm=llm,
         persona_name=persona_name,
         vault_path=vault_path,
+        max_iterations=settings.runtime.max_iterations,
     )
 
     initial_state: dict[str, Any] = {
@@ -187,6 +194,7 @@ async def run_session(
         llm=llm,
         persona_name=persona_name,
         vault_path=vault_path,
+        max_iterations=settings.runtime.max_iterations,
     )
 
     vault_store: VaultStore | None = None
@@ -245,15 +253,14 @@ async def run_session(
             preview_text(result.get("response", {}).get("final_response_text")),
         )
 
-        # Record initial relationship for delta calculation
+        # Record initial durable relationship for delta calculation
         if turn_count == 1:
-            initial_relationship = dict(result.get("relationship", {}))
+            initial_relationship = dict(((result.get("relationship_state", {}) or {}).get("durable", {}) or {}))
 
-        # Accumulate event flags across the session
-        turn_events = result.get("_internal", {}).get("event_flags", {})
-        fired = [k for k, v in turn_events.items() if v]
-        if fired:
-            session_event_log.append({"turn": turn_count, "events": fired})
+        appraisal = result.get("appraisal", {}) or {}
+        event_type = appraisal.get("event_type")
+        if event_type:
+            session_event_log.append({"turn": turn_count, "events": [str(event_type)]})
 
         response = result.get("response", {})
         final_text = response.get("final_response_text", "(no response)")
@@ -302,12 +309,12 @@ def _build_session_summary(
             "key_events": list[str],
         }
     """
-    final_rel = final_state.get("relationship", {})
+    final_rel = ((final_state.get("relationship_state", {}) or {}).get("durable", {}) or {})
     final_mood = final_state.get("mood", {}).get("base_mood", "calm")
 
     # Relationship delta
     rel_changes: list[str] = []
-    for key in ("trust", "intimacy", "tension", "distance"):
+    for key in ("trust", "intimacy", "distance", "attachment_pull"):
         before = initial_relationship.get(key)
         after = final_rel.get(key)
         if before is not None and after is not None:
@@ -348,36 +355,35 @@ def _build_session_summary(
 def _print_trace(result: dict[str, Any]) -> None:
     """Print trace information from a turn result."""
     trace = result.get("trace", {})
-    dynamics = trace.get("internal_dynamics", {})
-    motivational = trace.get("motivational_state", {})
-    if motivational or dynamics:
-        drive_state = motivational.get("drive_state", {}) or result.get("drive_state", {}) or {}
-        top_drives = list(drive_state.get("top_drives", []) or [])
-        primary = top_drives[0] if top_drives else {}
-        target = primary.get("target") or ((drive_state.get("drive_targets", {}) or {}).get(primary.get("name"), "?"))
-        defense = dynamics.get("defense_output", {}).get("selected_mechanism", "?")
-        print(f"  [Trace] Top drive: {primary.get('name', '?')}")
-        print(f"  [Trace] Target: {target}")
-        print(f"  [Trace] Defense mechanism: {defense}")
+    appraisal = result.get("appraisal", {}) or {}
+    conflict_state = result.get("conflict_state", {}) or {}
+    fidelity = trace.get("fidelity_gate", {}) or {}
+    if appraisal:
+        print(f"  [Trace] Event: {appraisal.get('event_type', '?')}")
+        print(f"  [Trace] Tension target: {appraisal.get('target_of_tension', '?')}")
+        print(f"  [Trace] Stakes: {appraisal.get('stakes', '?')}")
 
-    supervisor = trace.get("supervisor", {})
-    if supervisor:
-        print(f"  [Trace] Leakage: {supervisor.get('leakage_level', '?')}")
-        print(f"  [Trace] Surface: {supervisor.get('surface_intent', '?')}")
+    if conflict_state:
+        id_impulse = conflict_state.get("id_impulse", {}) or {}
+        residue = conflict_state.get("residue", {}) or {}
+        ego_move = conflict_state.get("ego_move", {}) or {}
+        print(f"  [Trace] Dominant want: {id_impulse.get('dominant_want', '?')}")
+        print(f"  [Trace] Ego move: {ego_move.get('social_move', '?')}")
+        print(f"  [Trace] Residue: {residue.get('visible_emotion', '?')}")
 
-    surface = trace.get("surface_realization", {})
-    if surface:
-        signature = surface.get("latent_drive_signature", {}) or {}
-        print(f"  [Trace] Latent signal: {signature.get('latent_signal_hint', '?')}")
-        blocked = surface.get("blocked_by_inhibition", []) or []
-        if blocked:
-            print(f"  [Trace] Blocked by inhibition: {', '.join(blocked)}")
+    if fidelity:
+        print(f"  [Trace] Fidelity passed: {fidelity.get('passed', False)}")
+        warnings = list(fidelity.get("warnings", []) or [])
+        if warnings:
+            print(f"  [Trace] Fidelity warnings: {', '.join(warnings[:2])}")
 
-    relationship = result.get("relationship", {})
-    if relationship:
-        print(f"  [State] Trust: {relationship.get('trust', 0):.2f}")
-        print(f"  [State] Tension: {relationship.get('tension', 0):.2f}")
-        print(f"  [State] Intimacy: {relationship.get('intimacy', 0):.2f}")
+    relationship_state = result.get("relationship_state", {}) or {}
+    durable = relationship_state.get("durable", {}) or {}
+    ephemeral = relationship_state.get("ephemeral", {}) or {}
+    if durable or ephemeral:
+        print(f"  [State] Trust: {durable.get('trust', 0):.2f}")
+        print(f"  [State] Tension: {ephemeral.get('tension', 0):.2f}")
+        print(f"  [State] Intimacy: {durable.get('intimacy', 0):.2f}")
 
     mood = result.get("mood", {})
     if mood:

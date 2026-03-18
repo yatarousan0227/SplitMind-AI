@@ -59,6 +59,9 @@ class ConversationPolicy(StrictContractModel):
     max_directness: float = Field(ge=0.0, le=1.0, default=0.5)
     emotion_surface_mode: str = Field(default="indirect_masked")
     indirection_strategy: str = Field(default="action_substitution")
+    relationship_stage: str = Field(default="")
+    escalation_allowed: bool = Field(default=False)
+    pacing_gate_reason: str = Field(default="")
     blocked_modes: list[ActionMode] = Field(default_factory=list)
 
 
@@ -70,6 +73,18 @@ class UtteranceCandidate(StrictContractModel):
     naturalness_score: float = Field(ge=0.0, le=1.0, default=0.5)
     policy_fit_score: float = Field(ge=0.0, le=1.0, default=0.5)
     latent_signal: str = Field(default="")
+    surface_posture: str = Field(
+        default="",
+        description="Surface delivery stance such as clipped_guard or question_return",
+    )
+    pacing_risk: float = Field(
+        ge=0.0, le=1.0, default=0.0,
+        description="Risk that this candidate advances the relationship too quickly or too flatly",
+    )
+    critic_flags: list[str] = Field(
+        default_factory=list,
+        description="Critic-side warnings or reasons this candidate may be demoted",
+    )
 
 
 class UtteranceSelection(StrictContractModel):

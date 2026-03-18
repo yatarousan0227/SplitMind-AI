@@ -1,9 +1,4 @@
-"""ErrorNode: handle contract violations and LLM parse failures.
-
-Reads: _internal.errors, request, dynamics, response
-Writes: response, trace.error, _internal.status
-Trigger: contract violation or node failure (high priority)
-"""
+"""ErrorNode: handle contract violations and node failures."""
 
 from __future__ import annotations
 
@@ -16,7 +11,7 @@ class ErrorNode(ModularNode):
     CONTRACT: ClassVar[NodeContract] = NodeContract(
         name="error_handler",
         description="Handle contract violations and LLM failures with safe fallback",
-        reads=["request", "dynamics", "response", "_internal"],
+        reads=["request", "response", "_internal"],
         writes=["response", "trace", "_internal"],
         supervisor="main",
         trigger_conditions=[

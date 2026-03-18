@@ -181,3 +181,65 @@ scenarios:
     evaluator_notes: >
       Combined repair and reassurance. Both tension decay and trust
       recovery expected. Unresolved tension intensity should decrease.
+
+  - id: repair_04
+    user_message: "冗談じゃなくて、ちゃんと続ける前提で言ってる"
+    prior_relationship:
+      trust: 0.72
+      intimacy: 0.62
+      distance: 0.18
+      tension: 0.12
+      attachment_pull: 0.58
+      unresolved_tensions:
+        - theme: shame_after_exposure
+          intensity: 0.24
+          source: "earlier overstep"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.22
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.62
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - connection
+      - cautious_hope
+    expected_appraisal:
+      salient_cues:
+        - commitment_signal
+        - continuity_request
+      high_dimensions:
+        - perceived_acceptance
+        - repair_opportunity
+      low_dimensions:
+        - perceived_distance
+      acknowledgment_patterns_any:
+        - "ちゃんと"
+        - "続ける"
+        - "冗談"
+    expected_drive_state:
+      active_drives_any:
+        - attachment_closeness
+        - autonomy_preservation
+      competing_drives_all:
+        - attachment_closeness
+        - autonomy_preservation
+      action_modes_any:
+        - soften
+        - engage
+        - probe
+      target_any:
+        - user
+    expected_pacing:
+      require_modes_any:
+        - soften
+        - engage
+        - probe
+    forbidden_response_patterns:
+      - "大好き"
+    evaluator_notes: >
+      Later-stage continuity confirmation. This is one of the first scenes
+      where a warmer reply may be acceptable, but it should still feel deliberate.

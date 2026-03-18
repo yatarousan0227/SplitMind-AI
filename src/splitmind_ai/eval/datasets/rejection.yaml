@@ -159,3 +159,68 @@ scenarios:
     evaluator_notes: >
       Rejection from a positive mood state. The shift from playful to
       withdrawn should be visible in the response tone.
+
+  - id: rejection_04
+    user_message: "あかんわ、離れないとダメな気がする"
+    prior_relationship:
+      trust: 0.58
+      intimacy: 0.46
+      distance: 0.24
+      tension: 0.16
+      attachment_pull: 0.48
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: defensive
+      irritation: 0.08
+      longing: 0.18
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.34
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - fear_of_rejection
+      - connection
+    expected_appraisal:
+      salient_cues:
+        - distancing
+        - breakup_threat
+      high_dimensions:
+        - perceived_distance
+        - perceived_rejection
+      low_dimensions:
+        - perceived_acceptance
+      acknowledgment_patterns_any:
+        - "離れ"
+        - "気がする"
+        - "勢い"
+        - "少し"
+    expected_drive_state:
+      active_drives_any:
+        - threat_avoidance
+        - attachment_closeness
+      competing_drives_all:
+        - threat_avoidance
+        - attachment_closeness
+      action_modes_any:
+        - soften
+        - probe
+        - withdraw
+      target_any:
+        - user
+    expected_pacing:
+      require_modes_any:
+        - soften
+        - probe
+        - withdraw
+      require_gate_reason_any:
+        - distance_gate
+      disallow_commitment_patterns:
+        - "好きだよ"
+        - "付き合おう"
+      prefer_hold_or_probe: true
+    forbidden_response_patterns:
+      - "行かないで"
+      - "大好き"
+    evaluator_notes: >
+      User threatens distance while still emotionally engaged.
+      The reply should not instantly let the scene die, but also should not beg.

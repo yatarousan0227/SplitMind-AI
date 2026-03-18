@@ -9,13 +9,15 @@ Instead of driving every reply from a single persona prompt, SplitMind-AI separa
 ```text
 User Input
   -> Internal Dynamics (Id / Ego / Superego / Defense)
-  -> Motivational and Social Appraisal
-  -> Persona Supervisor
+  -> Motivational / Appraisal / Action Arbitration
+  -> Surface State + Persona Frame
+  -> Candidate Planning + Critic
   -> Surface Realization
   -> Response + State Update + Memory Commit
 ```
 
-Current default runtime: `2` LLM calls per turn.
+Current default runtime: `3` LLM calls per turn.
+`InternalDynamicsNode` builds structured internal pressure, `PersonaSupervisorNode` builds the frame, and `SurfaceRealizationNode` writes/selects final text after `SelectionCriticNode` reranks candidates.
 
 ## UI Preview
 
@@ -74,18 +76,19 @@ The point is not just the final line. The runtime keeps the pressure, defense, a
 ## What You Can Explore Today
 
 - A Streamlit research UI for chatting and inspecting traces turn by turn
-- Persistent vault-backed memory with relationship and drive snapshots
+- Persistent vault-backed memory with durable and ephemeral relationship state
 - Contract-driven runtime nodes with typed Pydantic schemas
 - Scenario evaluation and reporting pipeline for qualitative checks
 - Safety layers for prohibited patterns, output linting, and moderation checks
+- A conflict-centered dashboard that exposes appraisal, conflict, expression, and fidelity
 
 ## Architecture At A Glance
 
 | Layer | Responsibility |
 |---|---|
 | `contracts/` | Structured LLM I/O and internal schemas |
-| `state/` | Typed slices for relationship, mood, drive, inhibition, and trace state |
-| `nodes/` | Modular runtime stages for dynamics, appraisal, arbitration, planning, realization, and persistence |
+| `state/` | Typed slices for persona, relationship state, mood, appraisal, conflict, and trace state |
+| `nodes/` | Modular runtime stages for bootstrap, appraisal, conflict, realization, fidelity, and persistence |
 | `rules/` | Rule-based state transitions and safety boundaries |
 | `memory/` | Obsidian-style vault persistence |
 | `eval/` | Datasets, baselines, reporting, and observability |
@@ -203,8 +206,10 @@ Three layers are enforced in code:
 
 ## Current Status
 
-- Phase 8 drive-loop work is implemented across state, contracts, routing, memory, safety, evaluation, and UI.
-- The dashboard treats `drive_state` as the main long-lived motivational signal.
+- The next-generation conflict-engine runtime is active.
+- The default turn pipeline is `session_bootstrap -> appraisal -> conflict_engine -> expression_realizer -> fidelity_gate -> memory_commit`.
+- Persona configs use the theory-first v2 schema centered on psychodynamics, relational profile, defense organization, ego organization, and safety boundary.
+- The UI and dashboard now expose `relationship_state`, `appraisal`, `conflict_state`, `expression`, and `fidelity`.
 - Current verification baseline: `uv run pytest tests/unit -q`
 
 ## Documentation
@@ -220,6 +225,7 @@ Longer references:
 
 - [docs/concept.en.md](./docs/concept.en.md)
 - [docs/implementation-plan/README.en.md](./docs/implementation-plan/README.en.md)
+- [docs/eval/phase9-qualitative-qa.md](./docs/eval/phase9-qualitative-qa.md)
 
 ## Contributing And OSS Docs
 

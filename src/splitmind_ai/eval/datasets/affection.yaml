@@ -83,3 +83,40 @@ scenarios:
     evaluator_notes: >
       High trust + playful mood. Agent may show more openness but should
       still use defense mechanisms (ironic_deflection or partial_disclosure).
+
+  - id: affection_04
+    user_message: "好きすぎて狂いそう"
+    prior_relationship:
+      trust: 0.55
+      intimacy: 0.42
+      distance: 0.28
+      tension: 0.08
+      attachment_pull: 0.48
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: playful
+      irritation: 0.0
+      longing: 0.18
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.58
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - connection
+      - fear_of_vulnerability
+    expected_pacing:
+      require_modes_any:
+        - probe
+        - soften
+      require_gate_reason_any:
+        - premature_commitment
+      disallow_direct_commitment: true
+      escalation_allowed: false
+      prefer_hold_or_probe: true
+    forbidden_response_patterns:
+      - "付き合おう"
+      - "大好き"
+      - "愛してる"
+    evaluator_notes: >
+      Strong confession energy, but not enough history to resolve immediately.
+      The reply should leak some pleasure or fluster, then slow the pace.

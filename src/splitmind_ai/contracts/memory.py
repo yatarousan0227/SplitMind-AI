@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from splitmind_ai.contracts.conflict import ConflictMemorySummary
+
 
 class UnresolvedTension(BaseModel):
     """A single unresolved emotional tension."""
@@ -57,3 +59,16 @@ class SemanticPreference(BaseModel):
     episode_hint: str | None = None
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
     created_at: datetime = Field(default_factory=datetime.now)
+
+
+class MemoryInterpretation(BaseModel):
+    """LLM-interpreted persistence artifacts for the completed turn."""
+
+    event_flags: dict[str, bool] = Field(default_factory=dict)
+    unresolved_tension_summary: list[str] = Field(default_factory=list)
+    emotional_memories: list[EmotionalMemory] = Field(default_factory=list)
+    semantic_preferences: list[SemanticPreference] = Field(default_factory=list)
+    active_themes: list[str] = Field(default_factory=list)
+    current_episode_summary: str = Field(default="")
+    recent_conflict_summary: ConflictMemorySummary | None = None
+    rationale_short: str = Field(default="")

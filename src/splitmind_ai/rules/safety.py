@@ -142,23 +142,6 @@ def check_prohibited_patterns(text: str) -> list[SafetyViolation]:
 # Layer 2: Supervisor-level output lint
 # ---------------------------------------------------------------------------
 
-def check_banned_expressions(
-    text: str,
-    banned: list[str],
-) -> list[SafetyViolation]:
-    """Check if persona-specific banned expressions appear in the response."""
-    violations: list[SafetyViolation] = []
-    for expr in banned:
-        if expr in text:
-            violations.append(SafetyViolation(
-                layer="output_lint",
-                severity="warn",
-                message=f"Banned expression detected: '{expr}'",
-                detail="Persona prohibited_expressions violation",
-            ))
-    return violations
-
-
 def check_leakage_deviation(
     actual_leakage: float,
     persona_leakage_policy: dict[str, float],
@@ -327,14 +310,12 @@ def lint_supervisor_output(
     expression_settings: dict[str, Any],
     persona_weights: dict[str, float],
     persona_leakage_policy: dict[str, float],
-    banned_expressions: list[str],
     dominant_desire: str = "",
     drive_state: dict[str, Any] | None = None,
     conversation_policy: dict[str, Any] | None = None,
 ) -> list[SafetyViolation]:
     """Run all supervisor-level output lint checks."""
     violations: list[SafetyViolation] = []
-    violations.extend(check_banned_expressions(response_text, banned_expressions))
     violations.extend(check_leakage_deviation(
         leakage_level, persona_leakage_policy, dominant_desire,
     ))
@@ -405,7 +386,6 @@ def run_safety_check(
     expression_settings: dict[str, Any] | None = None,
     persona_weights: dict[str, float] | None = None,
     persona_leakage_policy: dict[str, float] | None = None,
-    banned_expressions: list[str] | None = None,
     dominant_desire: str = "",
     drive_state: dict[str, Any] | None = None,
     conversation_policy: dict[str, Any] | None = None,
@@ -429,7 +409,6 @@ def run_safety_check(
             expression_settings=expression_settings or {},
             persona_weights=persona_weights or {},
             persona_leakage_policy=persona_leakage_policy or {},
-            banned_expressions=banned_expressions or [],
             dominant_desire=dominant_desire,
             drive_state=drive_state or {},
             conversation_policy=conversation_policy or {},

@@ -92,3 +92,21 @@ def test_load_settings_without_config_still_uses_env(tmp_path, monkeypatch):
     assert settings.llm.model == "gpt-4.1-nano"
     assert settings.llm.azure_deployment == "env-only-deployment"
     assert settings.llm.api_version == "2025-01-01-preview"
+
+
+def test_load_settings_reads_runtime_max_iterations(tmp_path):
+    config_path = tmp_path / "agent_config.yaml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "runtime:",
+                "  max_iterations: 14",
+                "  supervisor: main",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    settings = load_settings(config_path=config_path)
+
+    assert settings.runtime.max_iterations == 14

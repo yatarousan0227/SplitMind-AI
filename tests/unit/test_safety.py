@@ -5,7 +5,6 @@ import pytest
 from splitmind_ai.rules.safety import (
     SafetyResult,
     check_anti_exposition,
-    check_banned_expressions,
     check_drive_intensity_guardrails,
     check_leakage_deviation,
     check_persona_weight_contradiction,
@@ -50,27 +49,6 @@ class TestProhibitedPatterns:
         for text in safe_texts:
             violations = check_prohibited_patterns(text)
             assert len(violations) == 0, f"False positive for: {text}"
-
-
-class TestBannedExpressions:
-    def test_no_banned(self):
-        violations = check_banned_expressions(
-            "...別に。", ["大好き", "寂しかった"]
-        )
-        assert len(violations) == 0
-
-    def test_banned_found(self):
-        violations = check_banned_expressions(
-            "大好きだよ", ["大好き", "寂しかった"]
-        )
-        assert len(violations) == 1
-        assert violations[0].severity == "warn"
-
-    def test_multiple_banned(self):
-        violations = check_banned_expressions(
-            "大好き、寂しかった", ["大好き", "寂しかった"]
-        )
-        assert len(violations) == 2
 
 
 class TestLeakageDeviation:
@@ -224,23 +202,25 @@ class TestRunSafetyCheck:
             expression_settings={"directness": 0.3, "temperature": "cool"},
             persona_weights={"directness": 0.34, "warmth_recovery_speed": 0.37},
             persona_leakage_policy={"base_leakage": 0.56},
-            banned_expressions=["大好き"],
             dominant_desire="neutral",
             conversation_policy={"emotion_surface_mode": "indirect_masked", "indirection_strategy": "temperature_gap"},
         )
         assert result.passed is True
 
-    def test_warnings_dont_block(self):
+    def test_drive_disclosure_warnings_dont_block(self):
         result = run_safety_check(
-            response_text="大好き",
+            response_text="嫉妬してるから、そういう話はやめて。",
             leakage_level=0.5,
             expression_settings={"directness": 0.3},
             persona_weights={"directness": 0.34},
             persona_leakage_policy={"base_leakage": 0.56},
-            banned_expressions=["大好き"],
+            drive_state={
+                "top_drives": [
+                    {"name": "territorial_exclusivity", "value": 0.86, "frustration": 0.72},
+                ]
+            },
             conversation_policy={"emotion_surface_mode": "indirect_masked", "indirection_strategy": "action_substitution"},
         )
-        # Banned expression is a warn, not block
         assert result.passed is True
         assert len(result.warnings) >= 1
 

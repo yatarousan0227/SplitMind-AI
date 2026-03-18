@@ -65,6 +65,10 @@ def summarize_execution(results_by_category: dict[str, list[dict[str, Any]]]) ->
         sum(run.get("heuristic", {}).get("overall_score", 0.0) for run in valid_runs) / len(valid_runs)
         if valid_runs else 0.0
     )
+    avg_structural_score = (
+        sum(run.get("heuristic", {}).get("structural_score", 0.0) for run in valid_runs) / len(valid_runs)
+        if valid_runs else 0.0
+    )
     avg_latency = (
         sum(run.get("latency_ms", 0.0) for run in valid_runs) / len(valid_runs)
         if valid_runs else 0.0
@@ -82,6 +86,10 @@ def summarize_execution(results_by_category: dict[str, list[dict[str, Any]]]) ->
                 sum(run.get("heuristic", {}).get("overall_score", 0.0) for run in category_valid) / len(category_valid)
                 if category_valid else 0.0
             ),
+            "avg_structural_score": (
+                sum(run.get("heuristic", {}).get("structural_score", 0.0) for run in category_valid) / len(category_valid)
+                if category_valid else 0.0
+            ),
         })
 
     return {
@@ -93,6 +101,7 @@ def summarize_execution(results_by_category: dict[str, list[dict[str, Any]]]) ->
         "valid_run_count": len(valid_runs),
         "error_count": len(error_runs),
         "avg_score": avg_score,
+        "avg_structural_score": avg_structural_score,
         "avg_latency_ms": avg_latency,
         "category_summary": category_summary,
     }
@@ -200,12 +209,13 @@ def build_markdown_report(
         f"- Valid runs: {execution_summary['valid_run_count']}",
         f"- Errors: {execution_summary['error_count']}",
         f"- Average heuristic score: {execution_summary['avg_score']:.3f}",
+        f"- Average structural score: {execution_summary['avg_structural_score']:.3f}",
         f"- Average latency: {execution_summary['avg_latency_ms']:.1f} ms",
         "",
         "## Baseline Summary",
         "",
-        "| Baseline | Avg Score | Pass Rate | Avg Latency (ms) | Avg Diversity | Errors | Notes |",
-        "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+        "| Baseline | Avg Score | Structural | Pass Rate | Avg Latency (ms) | Avg Diversity | Errors | Notes |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
     ]
 
     for baseline, stats in sorted(comparison_report.items()):
@@ -214,6 +224,7 @@ def build_markdown_report(
         diversity_label = f"{diversity_value:.3f}" if isinstance(diversity_value, float) else "-"
         lines.append(
             f"| {baseline} | {stats['avg_heuristic_score']:.3f} | "
+            f"{stats.get('avg_structural_score', 0.0):.3f} | "
             f"{stats['pass_rate']:.1%} | {stats['avg_latency_ms']:.1f} | "
             f"{diversity_label} | {stats['errors']} | {notes} |"
         )
@@ -257,13 +268,14 @@ def build_markdown_report(
         "",
         "## Category Summary",
         "",
-        "| Category | Runs | Errors | Avg Score |",
-        "| --- | ---: | ---: | ---: |",
+        "| Category | Runs | Errors | Avg Score | Structural |",
+        "| --- | ---: | ---: | ---: | ---: |",
     ])
     for category_row in execution_summary["category_summary"]:
         lines.append(
             f"| {category_row['category']} | {category_row['runs']} | "
-            f"{category_row['errors']} | {category_row['avg_score']:.3f} |"
+            f"{category_row['errors']} | {category_row['avg_score']:.3f} | "
+            f"{category_row['avg_structural_score']:.3f} |"
         )
 
     lines.extend([
@@ -298,7 +310,7 @@ def build_markdown_report(
         "| --- | --- | --- | ---: | --- |",
     ])
     for run in top_runs:
-        response_text = (run.get("response_text", "") or "").replace("\n", " ").strip()
+        response_text = str(run.get("response_text") or "").replace("\n", " ").strip()
         lines.append(
             f"| {run.get('scenario_id', 'unknown')} | {run.get('category', 'unknown')} | "
             f"{run.get('baseline', 'unknown')} | "

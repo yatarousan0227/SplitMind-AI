@@ -1,0 +1,73 @@
+{
+  "generated_at": "2026-03-18T22:33:50",
+  "baseline_summary": {
+    "single_prompt_dedicated": {
+      "avg_pairwise_distance": 0.7946,
+      "min_pairwise_distance": 0.6945,
+      "collapse_pair_rate": 0.0,
+      "avg_heuristic_score": 0.8573,
+      "avg_structural_score": 0.0,
+      "persona_avg_scores": {
+        "angelic_but_deliberate": 0.8488,
+        "cold_attached_idol": 0.8835,
+        "irresistibly_sweet_center_heroine": 0.8435,
+        "warm_guarded_companion": 0.8532
+      }
+    },
+    "splitmind_full": {
+      "avg_pairwise_distance": 0.6934,
+      "min_pairwise_distance": 0.4105,
+      "collapse_pair_rate": 0.0,
+      "avg_heuristic_score": 0.9985,
+      "avg_structural_score": 0.6132,
+      "persona_avg_scores": {
+        "angelic_but_deliberate": 1.0,
+        "cold_attached_idol": 1.0,
+        "irresistibly_sweet_center_heroine": 1.0,
+        "warm_guarded_companion": 0.9939
+      }
+    }
+  },
+  "config_axes": {
+    "cold_attached_idol": {
+      "warmth_readiness": 0.37249999999999994,
+      "guardedness": 0.744,
+      "status_maintenance": 0.7766666666666667,
+      "repair_openness": 0.3125,
+      "jealousy_reactivity": 0.7875,
+      "self_disclosure_capacity": 0.18000000000000002
+    },
+    "warm_guarded_companion": {
+      "warmth_readiness": 0.5675,
+      "guardedness": 0.4720000000000001,
+      "status_maintenance": 0.43,
+      "repair_openness": 0.6525000000000001,
+      "jealousy_reactivity": 0.5225,
+      "self_disclosure_capacity": 0.3933333333333333
+    },
+    "angelic_but_deliberate": {
+      "warmth_readiness": 0.495,
+      "guardedness": 0.6620000000000001,
+      "status_maintenance": 0.8300000000000001,
+      "repair_openness": 0.5175000000000001,
+      "jealousy_reactivity": 0.71,
+      "self_disclosure_capacity": 0.24666666666666667
+    },
+    "irresistibly_sweet_center_heroine": {
+      "warmth_readiness": 0.73,
+      "guardedness": 0.312,
+      "status_maintenance": 0.44333333333333336,
+      "repair_openness": 0.7799999999999999,
+      "jealousy_reactivity": 0.575,
+      "self_disclosure_capacity": 0.5866666666666667
+    }
+  },
+  "scenario_ids": [
+    "affection_04",
+    "ambiguity_04",
+    "jealousy_02",
+    "mild_conflict_02",
+    "rejection_04",
+    "repair_01"
+  ]
+}

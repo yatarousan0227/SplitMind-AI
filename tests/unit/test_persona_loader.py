@@ -1,4 +1,4 @@
-"""Tests for persona YAML loading."""
+"""Tests for v2 persona YAML loading."""
 
 import pytest
 
@@ -13,26 +13,26 @@ def test_list_personas():
 
 def test_load_cold_attached_idol():
     p = load_persona("cold_attached_idol")
-    assert p.name == "cold but attached idol"
-    assert "id_strength" in p.weights
-    assert p.weights["id_strength"] == 0.78
-    assert len(p.tone_guardrails) > 0
-    assert len(p.prohibited_expressions) > 0
+    assert p.name == "cold_attached_idol"
+    assert p.psychodynamics["drives"]["closeness"] == pytest.approx(0.72)
+    assert p.relational_profile["attachment_pattern"] == "avoidant_leaning"
+    assert p.safety_boundary["hard_limits"]["max_direct_neediness"] == pytest.approx(0.18)
 
 
 def test_load_warm_guarded_companion():
     p = load_persona("warm_guarded_companion")
-    assert p.name == "warm but guarded companion"
-    assert p.weights["warmth_recovery_speed"] == 0.72
+    assert p.name == "warm_guarded_companion"
+    assert p.ego_organization["warmth_recovery_speed"] == pytest.approx(0.72)
+    assert p.relational_profile["default_role_frame"] == "protective_pair"
 
 
 def test_persona_to_slice():
     p = load_persona("cold_attached_idol")
     s = p.to_slice()
-    assert s["persona_name"] == "cold but attached idol"
-    assert isinstance(s["weights"], dict)
-    assert isinstance(s["defense_biases"], dict)
-    assert isinstance(s["tone_guardrails"], list)
+    assert s["persona_version"] == 2
+    assert isinstance(s["psychodynamics"], dict)
+    assert isinstance(s["defense_organization"], dict)
+    assert isinstance(s["safety_boundary"]["hard_limits"], dict)
 
 
 def test_load_nonexistent_persona_raises():

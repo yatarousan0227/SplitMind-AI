@@ -1,4 +1,4 @@
-"""Tests for state model validation."""
+"""Tests for next-generation state slice definitions."""
 
 from splitmind_ai.state.agent_state import CUSTOM_SLICES, SplitMindAgentState
 
@@ -11,30 +11,108 @@ def test_custom_slices_match_state_keys():
 
 
 def test_state_can_be_constructed_empty():
-    """SplitMindAgentState should be constructable with no fields (total=False)."""
+    """SplitMindAgentState should be constructable with no fields."""
     state: SplitMindAgentState = {}
     assert isinstance(state, dict)
 
 
-def test_state_can_hold_slices():
-    """State should accept valid slice dicts."""
+def test_state_can_hold_new_slices():
+    """State should accept the new conflict-engine-oriented slice structure."""
     state: SplitMindAgentState = {
         "request": {"session_id": "test", "user_message": "hello"},
         "response": {},
-        "relationship": {"trust": 0.5, "intimacy": 0.3},
+        "persona": {
+            "persona_version": 2,
+            "psychodynamics": {
+                "drives": {"closeness": 0.72, "status": 0.81},
+                "threat_sensitivity": {"rejection": 0.84},
+                "superego_configuration": {"dependency_shame": 0.79},
+            },
+            "relational_profile": {
+                "attachment_pattern": "avoidant_leaning",
+                "default_role_frame": "selective_one_to_one",
+                "intimacy_regulation": {"preferred_distance": 0.62},
+                "trust_dynamics": {"gain_speed": 0.34},
+                "dependency_model": {"accepts_user_dependence": 0.61},
+                "exclusivity_orientation": {"desires_priority": 0.74},
+                "repair_orientation": {"apology_receptivity": 0.22},
+            },
+            "defense_organization": {
+                "primary_defenses": {"ironic_deflection": 0.75},
+                "secondary_defenses": {"partial_disclosure": 0.35},
+            },
+            "ego_organization": {
+                "affect_tolerance": 0.43,
+                "impulse_regulation": 0.67,
+                "ambivalence_capacity": 0.72,
+                "mentalization": 0.64,
+                "self_observation": 0.59,
+                "self_disclosure_tolerance": 0.22,
+                "warmth_recovery_speed": 0.37,
+            },
+            "safety_boundary": {
+                "hard_limits": {"max_direct_neediness": 0.18},
+            },
+        },
+        "relationship_state": {
+            "durable": {
+                "trust": 0.5,
+                "intimacy": 0.3,
+                "distance": 0.5,
+                "attachment_pull": 0.3,
+                "relationship_stage": "warming",
+                "commitment_readiness": 0.35,
+                "repair_depth": 0.1,
+            },
+            "ephemeral": {
+                "tension": 0.22,
+                "recent_relational_charge": 0.33,
+                "escalation_allowed": False,
+                "interaction_fragility": 0.18,
+                "turn_local_repair_opening": 0.14,
+            },
+        },
         "mood": {"base_mood": "calm"},
         "appraisal": {
-            "dominant_appraisal": "competitive",
-            "perceived_competition": {"score": 0.8, "confidence": 0.9},
+            "event_type": "repair_offer",
+            "valence": "mixed",
+            "target_of_tension": "pride",
+            "stakes": "high",
+            "confidence": 0.84,
+            "cues": [{"label": "apology", "evidence": "ごめん", "intensity": 0.7, "confidence": 0.9}],
+            "summary_short": "User offers repair.",
         },
-        "social_model": {
-            "user_current_intent_hypotheses": [
-                {"label": "share", "confidence": 0.7}
-            ],
-        },
-        "self_state": {
-            "pride_level": 0.6,
-            "active_defenses": ["ironic_deflection"],
+        "conflict_state": {
+            "id_impulse": {
+                "dominant_want": "move_closer",
+                "secondary_wants": ["stay_safe"],
+                "intensity": 0.71,
+                "target": "user",
+            },
+            "superego_pressure": {
+                "forbidden_moves": ["direct_neediness"],
+                "self_image_to_protect": "composed",
+                "pressure": 0.81,
+                "shame_load": 0.32,
+            },
+            "ego_move": {
+                "social_move": "accept_but_hold",
+                "move_rationale": "Receive but do not collapse distance",
+                "dominant_compromise": "take the repair without overexposing",
+                "stability": 0.67,
+            },
+            "residue": {
+                "visible_emotion": "pleased_but_guarded",
+                "leak_channel": "temperature_gap",
+                "residue_text_intent": "let relief leak slightly",
+                "intensity": 0.41,
+            },
+            "expression_envelope": {
+                "length": "short",
+                "temperature": "cool_warm",
+                "directness": 0.31,
+                "closure": 0.44,
+            },
         },
         "drive_state": {
             "drive_vector": {
@@ -48,33 +126,31 @@ def test_state_can_hold_slices():
             "drive_targets": {"attachment_closeness": "user"},
             "frustration_vector": {"territorial_exclusivity": 0.2},
         },
-        "inhibition_state": {
-            "role_pressure": 0.4,
-            "face_preservation": 0.7,
-            "blocked_modes": ["full_disclosure"],
-            "preferred_defenses": ["partial_disclosure"],
-        },
-        "conversation_policy": {
-            "selected_mode": "tease",
-            "selection_rationale": "Protect face while engaging",
-            "competing_drives": ["attachment_closeness", "autonomy_preservation"],
-        },
-        "utterance_plan": {
-            "surface_intent": "test the user lightly",
-            "candidates": [
-                {"label": "dry_tease", "mode": "tease"},
-                {"label": "cool_probe", "mode": "probe"},
+        "working_memory": {
+            "active_themes": ["repair"],
+            "salient_user_phrases": ["ごめん"],
+            "recent_conflict_summaries": [
+                {
+                    "event_type": "repair_offer",
+                    "ego_move": "accept_but_hold",
+                    "residue": "pleased_but_guarded",
+                    "relationship_delta": "slight trust increase",
+                }
             ],
         },
-        "working_memory": {
-            "active_themes": ["comparison"],
-            "salient_user_phrases": ["他の人と楽しかった"],
+        "memory_interpretation": {
+            "event_flags": {"repair_attempt": True},
+            "unresolved_tension_summary": ["repair / pride / move_closer"],
+            "emotional_memories": [{"event": "ごめん", "emotion": "relief", "intensity": 0.62}],
+            "semantic_preferences": [],
+            "active_themes": ["repair", "trust"],
+            "current_episode_summary": "The user apologized and pushed for repair.",
         },
     }
     assert state["request"]["user_message"] == "hello"
-    assert state["relationship"]["trust"] == 0.5
-    assert state["appraisal"]["dominant_appraisal"] == "competitive"
+    assert state["relationship_state"]["durable"]["relationship_stage"] == "warming"
+    assert state["appraisal"]["event_type"] == "repair_offer"
+    assert state["conflict_state"]["ego_move"]["social_move"] == "accept_but_hold"
     assert state["drive_state"]["top_drives"][0]["name"] == "attachment_closeness"
-    assert state["inhibition_state"]["blocked_modes"] == ["full_disclosure"]
-    assert state["conversation_policy"]["selected_mode"] == "tease"
-    assert state["utterance_plan"]["candidates"][0]["label"] == "dry_tease"
+    assert state["working_memory"]["recent_conflict_summaries"][0]["event_type"] == "repair_offer"
+    assert state["memory_interpretation"]["event_flags"]["repair_attempt"] is True

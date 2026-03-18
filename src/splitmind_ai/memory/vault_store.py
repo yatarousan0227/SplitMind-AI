@@ -51,47 +51,67 @@ class VaultStore:
     # Relationship snapshot
     # ------------------------------------------------------------------
 
-    def load_relationship(self, user_id: str) -> dict[str, Any] | None:
-        """Load the latest relationship snapshot from vault."""
+    def load_relationship_state(self, user_id: str) -> dict[str, Any] | None:
+        """Load the latest durable relationship state from vault."""
         path = self._user_dir(user_id) / "relationship.md"
         if not path.exists():
             return None
         try:
             post = frontmatter.load(str(path))
             data = dict(post.metadata)
-            # unresolved_tensions may be stored as content body
+            data.pop("type", None)
+            data.pop("user_id", None)
+            data.pop("updated_at", None)
+            unresolved_summary: list[str] = []
             if post.content.strip():
                 import json
                 try:
-                    data["unresolved_tensions"] = json.loads(post.content)
+                    unresolved_summary = json.loads(post.content)
                 except json.JSONDecodeError:
-                    pass
+                    unresolved_summary = [
+                        line.strip()
+                        for line in post.content.splitlines()
+                        if line.strip()
+                    ]
+            data["unresolved_tension_summary"] = unresolved_summary
             return data
         except Exception:
             logger.warning("Failed to load relationship from %s", path, exc_info=True)
             return None
 
-    def save_relationship(self, user_id: str, relationship: dict[str, Any]) -> None:
-        """Save relationship snapshot to vault (overwrite)."""
+    def save_relationship_state(self, user_id: str, relationship_state: dict[str, Any]) -> None:
+        """Save durable relationship state to vault (overwrite)."""
         self._ensure_dirs(user_id)
         path = self._user_dir(user_id) / "relationship.md"
 
         import json
 
-        rel = dict(relationship)
-        unresolved = rel.pop("unresolved_tensions", [])
+        durable = dict(relationship_state)
+        unresolved_summary = list(durable.pop("unresolved_tension_summary", []) or [])
 
         metadata = {
             "type": "relationship_snapshot",
             "user_id": user_id,
             "updated_at": datetime.now().isoformat(),
-            **{k: v for k, v in rel.items() if isinstance(v, (int, float, str, bool))},
+            **{k: v for k, v in durable.items() if isinstance(v, (int, float, str, bool))},
         }
 
-        content = json.dumps(unresolved, ensure_ascii=False, indent=2) if unresolved else ""
+        content = (
+            json.dumps(unresolved_summary, ensure_ascii=False, indent=2)
+            if unresolved_summary else ""
+        )
 
         post = frontmatter.Post(content, **metadata)
         path.write_text(frontmatter.dumps(post), encoding="utf-8")
+
+    # Temporary aliases until all callers are migrated.
+    def load_relationship(self, user_id: str) -> dict[str, Any] | None:
+        """Backward-compatible alias for durable relationship state."""
+        return self.load_relationship_state(user_id)
+
+    def save_relationship(self, user_id: str, relationship: dict[str, Any]) -> None:
+        """Backward-compatible alias for durable relationship state."""
+        self.save_relationship_state(user_id, relationship)
 
     # ------------------------------------------------------------------
     # Session summaries
@@ -372,13 +392,14 @@ class VaultStore:
     def commit_turn(
         self,
         user_id: str,
-        relationship: dict[str, Any],
+        relationship_state: dict[str, Any],
         memory_candidates: dict[str, list[dict[str, Any]]],
         mood: dict[str, Any] | None = None,
     ) -> None:
-        """Persist relationship snapshot, mood, and new memory candidates."""
+        """Persist durable relationship state, mood, and new memory candidates."""
         try:
-            self.save_relationship(user_id, relationship)
+            durable = dict(relationship_state.get("durable", {}) or {})
+            self.save_relationship_state(user_id, durable)
         except Exception:
             logger.warning("Failed to save relationship snapshot", exc_info=True)
 

@@ -1,12 +1,4 @@
-"""SessionBootstrapNode: initializes turn state from input and loaded context.
-
-On session start (is_first_turn), loads persisted state from Obsidian vault.
-On subsequent turns, the state is carried forward from the previous turn.
-
-Reads: request, _internal
-Writes: conversation, persona, relationship, mood, memory, working_memory, drive_state, inhibition_state, _internal
-Trigger: is_first_turn == True (priority 100)
-"""
+"""SessionBootstrapNode: initializes next-generation turn state from input and vault."""
 
 from __future__ import annotations
 
@@ -23,15 +15,24 @@ from splitmind_ai.personas.loader import load_persona
 logger = logging.getLogger(__name__)
 
 # Defaults when vault has no prior state
-_DEFAULT_RELATIONSHIP: dict[str, Any] = {
-    "trust": 0.5,
-    "intimacy": 0.3,
-    "distance": 0.5,
-    "tension": 0.0,
-    "attachment_pull": 0.3,
-    "unresolved_tensions": [],
-    "user_sensitivities": [],
-    "attachment_tendency": "neutral",
+_DEFAULT_RELATIONSHIP_STATE: dict[str, Any] = {
+    "durable": {
+        "trust": 0.5,
+        "intimacy": 0.3,
+        "distance": 0.5,
+        "attachment_pull": 0.3,
+        "relationship_stage": "unfamiliar",
+        "commitment_readiness": 0.0,
+        "repair_depth": 0.0,
+        "unresolved_tension_summary": [],
+    },
+    "ephemeral": {
+        "tension": 0.0,
+        "recent_relational_charge": 0.0,
+        "escalation_allowed": False,
+        "interaction_fragility": 0.0,
+        "turn_local_repair_opening": 0.0,
+    },
 }
 
 _DEFAULT_MOOD: dict[str, Any] = {
@@ -44,7 +45,6 @@ _DEFAULT_MOOD: dict[str, Any] = {
     "turns_since_shift": 0,
 }
 
-
 class SessionBootstrapNode(ModularNode):
     CONTRACT: ClassVar[NodeContract] = NodeContract(
         name="session_bootstrap",
@@ -53,12 +53,11 @@ class SessionBootstrapNode(ModularNode):
         writes=[
             "conversation",
             "persona",
-            "relationship",
+            "relationship_state",
             "mood",
             "memory",
             "working_memory",
             "drive_state",
-            "inhibition_state",
             "_internal",
         ],
         supervisor="main",
@@ -105,20 +104,15 @@ class SessionBootstrapNode(ModularNode):
             persona_slice = persona_config.to_slice()
         except FileNotFoundError:
             logger.warning("Persona '%s' not found, using empty defaults", self._persona_name)
-            persona_slice = {
-                "persona_name": self._persona_name,
-                "weights": {},
-                "base_attributes": {},
-                "defense_biases": {},
-                "leakage_policy": {},
-                "tone_guardrails": [],
-                "prohibited_expressions": [],
-            }
+            persona_slice = _default_persona_slice(self._persona_name)
 
         turn_number = internal.get("turn_count", 0) + 1
 
         # Load persisted state from vault (session start only)
-        relationship = dict(_DEFAULT_RELATIONSHIP)
+        relationship_state = {
+            "durable": dict(_DEFAULT_RELATIONSHIP_STATE["durable"]),
+            "ephemeral": dict(_DEFAULT_RELATIONSHIP_STATE["ephemeral"]),
+        }
         mood = dict(_DEFAULT_MOOD)
         memory: dict[str, Any] = {
             "session_summaries": [],
@@ -128,11 +122,11 @@ class SessionBootstrapNode(ModularNode):
 
         if self._vault is not None:
             try:
-                vault_rel = self._vault.load_relationship(user_id)
+                vault_rel = self._vault.load_relationship_state(user_id)
                 if vault_rel:
                     for k, v in vault_rel.items():
-                        if k in relationship:
-                            relationship[k] = v
+                        if k in relationship_state["durable"]:
+                            relationship_state["durable"][k] = v
                     logger.info("Loaded relationship state from vault for user=%s", user_id)
             except Exception:
                 logger.warning("Failed to load relationship from vault", exc_info=True)
@@ -178,7 +172,7 @@ class SessionBootstrapNode(ModularNode):
             "retrieved_memory_ids": _derive_retrieved_memory_ids(memory),
             "unresolved_questions": [],
             "current_episode_summary": None,
-            "last_user_intent_prediction": None,
+            "recent_conflict_summaries": [],
         }
 
         # Internal session metadata
@@ -198,14 +192,49 @@ class SessionBootstrapNode(ModularNode):
         return NodeOutputs(
             conversation=conversation,
             persona=persona_slice,
-            relationship=relationship,
+            relationship_state=relationship_state,
             mood=mood,
             memory=memory,
             working_memory=working_memory,
             drive_state={},
-            inhibition_state={},
             _internal=internal_update,
         )
+
+
+def _default_persona_slice(persona_name: str) -> dict[str, Any]:
+    return {
+        "persona_version": 2,
+        "psychodynamics": {
+            "drives": {},
+            "threat_sensitivity": {},
+            "superego_configuration": {},
+        },
+        "relational_profile": {
+            "attachment_pattern": "unknown",
+            "default_role_frame": "default",
+            "intimacy_regulation": {},
+            "trust_dynamics": {},
+            "dependency_model": {},
+            "exclusivity_orientation": {},
+            "repair_orientation": {},
+        },
+        "defense_organization": {
+            "primary_defenses": {},
+            "secondary_defenses": {},
+        },
+        "ego_organization": {
+            "affect_tolerance": 0.5,
+            "impulse_regulation": 0.5,
+            "ambivalence_capacity": 0.5,
+            "mentalization": 0.5,
+            "self_observation": 0.5,
+            "self_disclosure_tolerance": 0.5,
+            "warmth_recovery_speed": 0.5,
+        },
+        "safety_boundary": {
+            "hard_limits": {},
+        },
+    }
 
 
 def _extract_memory_retrieval_params(request: dict[str, Any]) -> dict[str, Any]:

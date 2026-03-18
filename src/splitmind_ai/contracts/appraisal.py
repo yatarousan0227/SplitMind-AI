@@ -1,8 +1,4 @@
-"""Phase 6 scaffolds for appraisal-oriented state.
-
-These models are not wired into the runtime yet.
-They exist to lock the initial schema shape before the nodes are implemented.
-"""
+"""Contract schemas for stimulus appraisal in the conflict-engine architecture."""
 
 from __future__ import annotations
 
@@ -12,112 +8,76 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class StrictContractModel(BaseModel):
-    """Base model for phase-6 contracts with strict field handling."""
+    """Base model for strict schema contracts."""
 
     model_config = ConfigDict(extra="forbid")
 
 
-class SocialCueType(str, Enum):
-    """High-level interpersonal cue categories."""
+class RelationalEventType(str, Enum):
+    """High-level relational meaning inferred from the user turn."""
 
-    acceptance = "acceptance"
-    rejection = "rejection"
-    competition = "competition"
+    good_news = "good_news"
+    exclusive_disclosure = "exclusive_disclosure"
+    repair_offer = "repair_offer"
+    commitment_request = "commitment_request"
+    reassurance = "reassurance"
     distancing = "distancing"
     ambiguity = "ambiguity"
-    repair_bid = "repair_bid"
-    care_signal = "care_signal"
+    affection_signal = "affection_signal"
+    provocation = "provocation"
+    boundary_test = "boundary_test"
+    casual_check_in = "casual_check_in"
+    unknown = "unknown"
 
 
-class SocialCue(StrictContractModel):
-    """A single social cue inferred from the latest user message."""
+class AppraisalValence(str, Enum):
+    """Overall relational valence of the event."""
 
-    cue_type: SocialCueType
-    evidence: str = Field(description="Short textual evidence from the user message")
-    intensity: float = Field(ge=0.0, le=1.0)
-    confidence: float = Field(ge=0.0, le=1.0)
-
-
-class AppraisalDimension(StrictContractModel):
-    """One dimension of subjective appraisal."""
-
-    score: float = Field(ge=0.0, le=1.0)
-    confidence: float = Field(ge=0.0, le=1.0)
-    rationale_short: str = Field(default="")
-    trend: str = Field(default="stable")
-    driver_cues: list[SocialCueType] = Field(default_factory=list)
+    positive = "positive"
+    negative = "negative"
+    mixed = "mixed"
+    neutral = "neutral"
 
 
-class AppraisalLabel(str, Enum):
-    """Coarse labels for the currently dominant appraisal."""
+class TensionTarget(str, Enum):
+    """Which internal axis the event primarily tensions."""
 
-    accepted = "accepted"
-    rejected = "rejected"
-    threatened = "threatened"
-    competitive = "competitive"
-    distant = "distant"
-    uncertain = "uncertain"
-    repairable = "repairable"
-
-
-class AppraisalState(StrictContractModel):
-    """Subjective meaning assigned to the current interaction."""
-
-    perceived_acceptance: AppraisalDimension
-    perceived_rejection: AppraisalDimension
-    perceived_competition: AppraisalDimension
-    perceived_distance: AppraisalDimension
-    ambiguity: AppraisalDimension
-    face_threat: AppraisalDimension
-    attachment_activation: AppraisalDimension
-    repair_opportunity: AppraisalDimension
-    dominant_appraisal: AppraisalLabel | None = Field(default=None)
-    dominant_appraisal_confidence: float = Field(ge=0.0, le=1.0, default=0.0)
-    active_wounds: list[str] = Field(default_factory=list)
-    triggered_drives: list[str] = Field(default_factory=list)
-    targeted_wounds: list[str] = Field(default_factory=list)
-    self_image_threats: list[str] = Field(default_factory=list)
-    summary_short: str = Field(default="")
+    closeness = "closeness"
+    pride = "pride"
+    shame = "shame"
+    jealousy = "jealousy"
+    control = "control"
+    safety = "safety"
+    status = "status"
+    ambiguity = "ambiguity"
 
 
-class SocialIntentHypothesis(StrictContractModel):
-    """Agent guess about what the user is currently trying to do."""
+class Stakes(str, Enum):
+    """How consequential the event appears for the relationship."""
+
+    low = "low"
+    medium = "medium"
+    high = "high"
+
+
+class RelationalCue(StrictContractModel):
+    """A compact cue extracted from the user turn."""
 
     label: str
-    confidence: float = Field(ge=0.0, le=1.0)
-    supporting_cues: list[SocialCueType] = Field(default_factory=list)
-
-
-class SocialModelState(StrictContractModel):
-    """Working model of the user across recent turns."""
-
-    user_current_intent_hypotheses: list[SocialIntentHypothesis] = Field(
-        default_factory=list
-    )
-    user_attachment_guess: str = Field(default="unknown")
-    user_sensitivity_guess: list[str] = Field(default_factory=list)
+    evidence: str = Field(default="")
+    intensity: float = Field(ge=0.0, le=1.0, default=0.5)
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
-    recent_prediction_errors: list[str] = Field(default_factory=list)
-    last_user_action: str = Field(default="unknown")
 
 
-class SelfState(StrictContractModel):
-    """Internal self-protective state for the active persona."""
+class StimulusAppraisal(StrictContractModel):
+    """Relational interpretation of the latest user turn."""
 
-    threatened_self_image: list[str] = Field(default_factory=list)
-    pride_level: float = Field(ge=0.0, le=1.0, default=0.5)
-    shame_activation: float = Field(ge=0.0, le=1.0, default=0.0)
-    dependency_fear: float = Field(ge=0.0, le=1.0, default=0.0)
-    desire_for_closeness: float = Field(ge=0.0, le=1.0, default=0.0)
-    urge_to_test_user: float = Field(ge=0.0, le=1.0, default=0.0)
-    active_defenses: list[str] = Field(default_factory=list)
-
-
-class AppraisalBundle(StrictContractModel):
-    """Combined output scaffold for future SocialCue/Appraisal nodes."""
-
-    social_cues: list[SocialCue] = Field(default_factory=list)
-    appraisal: AppraisalState
-    social_model: SocialModelState = Field(default_factory=SocialModelState)
-    self_state: SelfState = Field(default_factory=SelfState)
-    source_turn_id: str = Field(default="")
+    event_type: RelationalEventType = Field(default=RelationalEventType.unknown)
+    valence: AppraisalValence = Field(default=AppraisalValence.neutral)
+    target_of_tension: TensionTarget = Field(default=TensionTarget.ambiguity)
+    stakes: Stakes = Field(default=Stakes.low)
+    confidence: float = Field(ge=0.0, le=1.0, default=0.5)
+    cues: list[RelationalCue] = Field(default_factory=list)
+    summary_short: str = Field(default="")
+    user_intent_guess: str = Field(default="")
+    active_themes: list[str] = Field(default_factory=list)

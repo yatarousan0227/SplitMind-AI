@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
-
-from splitmind_ai.drive_signals import build_latent_drive_signature, compute_drive_intensity
 
 RELATIONSHIP_METRICS = (
     "trust",
@@ -15,80 +14,64 @@ RELATIONSHIP_METRICS = (
 )
 
 AFFECT_METRICS = (
-    "intensity",
-    "frustration",
-    "carryover",
-    "suppression_load",
-    "satiation",
+    "id_intensity",
+    "superego_pressure",
+    "residue_intensity",
+    "directness",
+    "closure",
 )
 
 APPRAISAL_DIMENSIONS = (
-    "perceived_acceptance",
-    "perceived_rejection",
-    "perceived_competition",
-    "perceived_distance",
-    "ambiguity",
-    "face_threat",
-    "attachment_activation",
-    "repair_opportunity",
-)
-
-SELF_STATE_DIMENSIONS = (
-    "pride_level",
-    "shame_activation",
-    "dependency_fear",
-    "desire_for_closeness",
-    "urge_to_test_user",
+    "confidence",
+    "stakes",
+    "closeness_axis",
+    "pride_axis",
+    "jealousy_axis",
+    "ambiguity_axis",
 )
 
 TIMING_KEYS = (
-    ("internal_dynamics", "internal_dynamics_ms"),
-    ("social_cue", "social_cue_ms"),
     ("appraisal", "appraisal_ms"),
-    ("action_arbitration", "action_arbitration_ms"),
-    ("supervisor", "persona_supervisor_ms"),
-    ("utterance_planner", "utterance_planner_ms"),
-    ("surface_realization", "surface_realization_ms"),
+    ("conflict_engine", "conflict_engine_ms"),
+    ("expression_realizer", "expression_realizer_ms"),
+    ("fidelity_gate", "fidelity_gate_ms"),
+    ("memory_interpreter", "memory_interpreter_ms"),
     ("memory_commit", "memory_commit_ms"),
 )
 
 
 def build_turn_snapshot(result: dict[str, Any], turn_number: int) -> dict[str, Any]:
     """Extract a compact dashboard snapshot from the full graph result."""
-    relationship = result.get("relationship", {}) or {}
+    relationship_state = result.get("relationship_state", {}) or {}
+    durable = relationship_state.get("durable", {}) or {}
+    ephemeral = relationship_state.get("ephemeral", {}) or {}
     mood = result.get("mood", {}) or {}
-    drive_state = result.get("drive_state", {}) or {}
-    inhibition_state = result.get("inhibition_state", {}) or {}
     appraisal = result.get("appraisal", {}) or {}
-    self_state = result.get("self_state", {}) or {}
-    conversation_policy = result.get("conversation_policy", {}) or {}
-    utterance_plan = result.get("utterance_plan", {}) or {}
+    conflict_state = result.get("conflict_state", {}) or {}
     trace = result.get("trace", {}) or {}
-    internal = result.get("_internal", {}) or {}
     memory = result.get("memory", {}) or {}
     working_memory = result.get("working_memory", {}) or {}
-
-    supervisor_trace = trace.get("supervisor", {}) or {}
-    surface_trace = trace.get("surface_realization", {}) or {}
+    fidelity_trace = trace.get("fidelity_gate", {}) or {}
+    expression_trace = trace.get("expression_realizer", {}) or {}
     timing = _extract_timing(trace)
-    latent_drive_signature = dict(
-        surface_trace.get("latent_drive_signature")
-        or build_latent_drive_signature(drive_state, conversation_policy)
-    )
-    top_drives = _top_drives(drive_state)
+    envelope = conflict_state.get("expression_envelope", {}) or {}
+    id_impulse = conflict_state.get("id_impulse", {}) or {}
+    superego = conflict_state.get("superego_pressure", {}) or {}
+    ego_move = conflict_state.get("ego_move", {}) or {}
+    residue = conflict_state.get("residue", {}) or {}
+    appraisal_dimensions = _appraisal_dimensions(appraisal)
 
-    event_flags = (
-        internal.get("event_flags")
-        or (trace.get("memory_commit", {}) or {}).get("event_flags")
-        or (trace.get("internal_dynamics", {}) or {}).get("event_flags")
-        or {}
-    )
+    working_memory_themes = _normalize_theme_list(working_memory.get("active_themes", []))
 
     return {
         "turn": int(turn_number),
         "relationship": {
-            **{metric: _bounded_float(relationship.get(metric)) for metric in RELATIONSHIP_METRICS},
-            "unresolved_tensions": _top_tensions(relationship.get("unresolved_tensions", [])),
+            "trust": _bounded_float(durable.get("trust")),
+            "intimacy": _bounded_float(durable.get("intimacy")),
+            "distance": _bounded_float(durable.get("distance")),
+            "tension": _bounded_float(ephemeral.get("tension")),
+            "attachment_pull": _bounded_float(durable.get("attachment_pull")),
+            "unresolved_tensions": _top_tensions(durable.get("unresolved_tension_summary", [])),
         },
         "mood": {
             "base_mood": mood.get("base_mood"),
@@ -98,82 +81,62 @@ def build_turn_snapshot(result: dict[str, Any], turn_number: int) -> dict[str, A
             "fatigue": _bounded_float(mood.get("fatigue")),
             "openness": _bounded_float(mood.get("openness")),
         },
-        "drive": {
-            "primary_drive": latent_drive_signature.get("primary_drive"),
-            "secondary_drive": latent_drive_signature.get("secondary_drive"),
-            "top_target": latent_drive_signature.get("target"),
-            "intensity": _bounded_float(
-                _first_present(
-                    latent_drive_signature.get("intensity"),
-                    compute_drive_intensity(drive_state),
-                )
-            ),
-            "frustration": _bounded_float(latent_drive_signature.get("frustration")),
-            "carryover": _bounded_float(latent_drive_signature.get("carryover")),
-            "suppression_load": _bounded_float(latent_drive_signature.get("suppression_load")),
-            "satiation": _bounded_float(latent_drive_signature.get("satiation")),
-            "top_drives": top_drives,
-            "latent_drive_signature": latent_drive_signature,
-        },
         "appraisal": {
-            "dominant_appraisal": appraisal.get("dominant_appraisal"),
-            "dimensions": {
-                dimension: _dimension_score(appraisal.get(dimension))
-                for dimension in APPRAISAL_DIMENSIONS
-            },
+            "event_type": appraisal.get("event_type") or "",
+            "valence": appraisal.get("valence") or "",
+            "target_of_tension": appraisal.get("target_of_tension") or "",
+            "stakes": appraisal.get("stakes") or "",
+            "confidence": _bounded_float(appraisal.get("confidence")),
+            "summary_short": appraisal.get("summary_short") or "",
+            "dimensions": appraisal_dimensions,
+            "active_themes": _normalize_theme_list(appraisal.get("active_themes", [])),
         },
-        "self_state": {
-            dimension: _bounded_float(self_state.get(dimension))
-            for dimension in SELF_STATE_DIMENSIONS
+        "conflict": {
+            "dominant_want": id_impulse.get("dominant_want") or "",
+            "target": id_impulse.get("target") or "",
+            "id_intensity": _bounded_float(id_impulse.get("intensity")),
+            "forbidden_moves": list(superego.get("forbidden_moves", []) or [])[:4],
+            "self_image_to_protect": superego.get("self_image_to_protect") or "",
+            "superego_pressure": _bounded_float(superego.get("pressure")),
+            "shame_load": _bounded_float(superego.get("shame_load")),
+            "social_move": ego_move.get("social_move") or "",
+            "move_rationale": ego_move.get("move_rationale") or "",
+            "stability": _bounded_float(ego_move.get("stability")),
+            "visible_emotion": residue.get("visible_emotion") or "",
+            "leak_channel": residue.get("leak_channel") or "",
+            "residue_intensity": _bounded_float(residue.get("intensity")),
         },
-        "policy": {
-            "selected_mode": conversation_policy.get("selected_mode"),
-            "fallback_mode": conversation_policy.get("fallback_mode"),
-            "max_leakage": _bounded_float(conversation_policy.get("max_leakage")),
-            "max_directness": _bounded_float(conversation_policy.get("max_directness")),
-            "blocked_by_inhibition": list(
-                surface_trace.get("blocked_by_inhibition")
-                or conversation_policy.get("blocked_by_inhibition", [])
-                or inhibition_state.get("blocked_drives", [])
-                or []
-            ),
-            "satisfaction_goal": (
-                surface_trace.get("satisfaction_goal")
-                or conversation_policy.get("satisfaction_goal")
-                or ""
-            ),
-            "candidates": [
-                {
-                    "label": candidate.get("label") or candidate.get("mode") or "unknown",
-                    "mode": candidate.get("mode"),
-                    "score": _bounded_float(candidate.get("score")),
-                }
-                for candidate in conversation_policy.get("candidates", []) or []
-            ],
+        "expression": {
+            "length": envelope.get("length") or "",
+            "temperature": envelope.get("temperature") or "",
+            "directness": _bounded_float(envelope.get("directness")),
+            "closure": _bounded_float(envelope.get("closure")),
+            "used_llm": bool(expression_trace.get("used_llm", False)),
         },
-        "supervisor": {
-            "leakage_level": _bounded_float(
-                _first_present(
-                    utterance_plan.get("leakage_level"),
-                    supervisor_trace.get("leakage_level"),
-                )
-            ),
-            "containment_success": _bounded_float(
-                _first_present(
-                    utterance_plan.get("containment_success"),
-                    supervisor_trace.get("containment_success"),
-                )
-            ),
+        "pacing": {
+            "relationship_stage": durable.get("relationship_stage") or "",
+            "commitment_readiness": _bounded_float(durable.get("commitment_readiness")),
+            "repair_depth": _bounded_float(durable.get("repair_depth")),
+            "escalation_allowed": bool(ephemeral.get("escalation_allowed", False)),
+        },
+        "fidelity": {
+            "passed": bool(fidelity_trace.get("passed", False)),
+            "move_fidelity": _bounded_float(fidelity_trace.get("move_fidelity")),
+            "residue_fidelity": _bounded_float(fidelity_trace.get("residue_fidelity")),
+            "structural_persona_fidelity": _bounded_float(fidelity_trace.get("structural_persona_fidelity")),
+            "anti_exposition": _bounded_float(fidelity_trace.get("anti_exposition")),
+            "hard_safety": _bounded_float(fidelity_trace.get("hard_safety")),
+            "warnings": list(fidelity_trace.get("warnings", []) or [])[:4],
         },
         "timing": timing,
-        "events": [key for key, value in event_flags.items() if bool(value)],
+        "events": [str(appraisal.get("event_type"))] if appraisal.get("event_type") else [],
         "memory": {
             "counts": {
                 "emotional_memories": len(memory.get("emotional_memories", []) or []),
                 "semantic_preferences": len(memory.get("semantic_preferences", []) or []),
-                "active_themes": len(working_memory.get("active_themes", []) or []),
+                "active_themes": len(working_memory_themes),
             },
-            "active_themes": list(working_memory.get("active_themes", []) or [])[:6],
+            "active_themes": working_memory_themes,
         },
     }
 
@@ -184,11 +147,12 @@ def build_history_rows(turn_snapshots: list[dict[str, Any]]) -> dict[str, list[d
     affect_rows: list[dict[str, Any]] = []
     event_rows: list[dict[str, Any]] = []
     timing_rows: list[dict[str, Any]] = []
+    surface_rows: list[dict[str, Any]] = []
 
     for snapshot in sorted(turn_snapshots, key=lambda item: item.get("turn", 0)):
         turn = int(snapshot.get("turn", 0))
         relationship = snapshot.get("relationship", {}) or {}
-        drive = snapshot.get("drive", {}) or {}
+        conflict = snapshot.get("conflict", {}) or {}
 
         for metric in RELATIONSHIP_METRICS:
             relationship_rows.append({
@@ -201,7 +165,7 @@ def build_history_rows(turn_snapshots: list[dict[str, Any]]) -> dict[str, list[d
             affect_rows.append({
                 "turn": turn,
                 "metric": metric,
-                "value": _bounded_float(drive.get(metric)),
+                "value": _bounded_float(conflict.get(metric) if metric in conflict else (snapshot.get("expression", {}) or {}).get(metric)),
             })
 
         for event in snapshot.get("events", []) or []:
@@ -215,11 +179,29 @@ def build_history_rows(turn_snapshots: list[dict[str, Any]]) -> dict[str, list[d
                 "value": float(value),
             })
 
+        conflict = snapshot.get("conflict", {}) or {}
+        pacing = snapshot.get("pacing", {}) or {}
+        social_move = str(conflict.get("social_move") or "")
+        relationship_stage = str(pacing.get("relationship_stage") or "")
+        if social_move:
+            surface_rows.append({
+                "turn": turn,
+                "metric": "social_move",
+                "value": social_move,
+            })
+        if relationship_stage:
+            surface_rows.append({
+                "turn": turn,
+                "metric": "relationship_stage",
+                "value": relationship_stage,
+            })
+
     return {
         "relationship": relationship_rows,
         "affect": affect_rows,
         "events": event_rows,
         "timing": timing_rows,
+        "surface": surface_rows,
     }
 
 
@@ -229,13 +211,14 @@ def build_current_dashboard(turn_snapshots: list[dict[str, Any]]) -> dict[str, A
         return {
             "turns": 0,
             "current": None,
-            "drive_story": "No active drive loop yet.",
+            "conflict_story": "No active conflict loop yet.",
             "story_steps": [],
-            "candidate_rows": [],
             "event_groups": [],
             "appraisal_radar": [],
-            "self_state_radar": [],
-            "drive_rows": [],
+            "conflict_rows": [],
+            "expression_rows": [],
+            "pacing_rows": [],
+            "fidelity_rows": [],
             "residue_rows": [],
             "unresolved_tensions": [],
             "active_themes": [],
@@ -252,24 +235,12 @@ def build_current_dashboard(turn_snapshots: list[dict[str, Any]]) -> dict[str, A
     return {
         "turns": len(turn_snapshots),
         "current": latest,
-        "drive_story": _build_drive_story(latest),
+        "conflict_story": _build_conflict_story(latest),
         "story_steps": story_steps,
-        "candidate_rows": [
-            {
-                "label": candidate.get("label", "unknown"),
-                "mode": candidate.get("mode"),
-                "score": _bounded_float(candidate.get("score")),
-            }
-            for candidate in latest.get("policy", {}).get("candidates", []) or []
-        ],
-        "drive_rows": [
-            {
-                "label": drive.get("name", "unknown"),
-                "value": _bounded_float(drive.get("value")),
-                "target": drive.get("target") or "",
-            }
-            for drive in (latest.get("drive", {}) or {}).get("top_drives", []) or []
-        ],
+        "conflict_rows": _build_conflict_rows(latest),
+        "expression_rows": _build_expression_rows(latest),
+        "pacing_rows": _build_pacing_rows(latest),
+        "fidelity_rows": _build_fidelity_rows(latest),
         "residue_rows": _build_residue_rows(latest),
         "event_groups": [
             {"turn": snapshot.get("turn", 0), "events": list(snapshot.get("events", []) or [])}
@@ -279,10 +250,6 @@ def build_current_dashboard(turn_snapshots: list[dict[str, Any]]) -> dict[str, A
         "appraisal_radar": [
             {"axis": axis, "value": _bounded_float(value)}
             for axis, value in (latest.get("appraisal", {}).get("dimensions", {}) or {}).items()
-        ],
-        "self_state_radar": [
-            {"axis": axis, "value": _bounded_float(value)}
-            for axis, value in (latest.get("self_state", {}) or {}).items()
         ],
         "unresolved_tensions": _top_tensions(
             (latest.get("relationship", {}) or {}).get("unresolved_tensions", [])
@@ -307,125 +274,278 @@ def _top_tensions(tensions: Any) -> list[dict[str, Any]]:
         return []
     normalized: list[dict[str, Any]] = []
     for tension in tensions:
-        if not isinstance(tension, dict):
-            continue
-        normalized.append({
-            "theme": tension.get("theme", "unknown"),
-            "intensity": _bounded_float(tension.get("intensity")),
-            "source": tension.get("source"),
-        })
-    normalized.sort(key=lambda item: item.get("intensity", 0.0), reverse=True)
+        if isinstance(tension, str):
+            normalized.append({"theme": tension, "intensity": 0.5, "source": ""})
+        elif isinstance(tension, dict):
+            theme = _normalize_theme_item(
+                tension.get("theme")
+                or tension.get("label")
+                or tension.get("name")
+                or tension.get("target")
+                or tension
+            )
+            normalized.append({
+                "theme": theme or "unknown",
+                "intensity": _bounded_float(tension.get("intensity")),
+                "source": _summarize_source(tension.get("source")),
+            })
     return normalized[:3]
 
 
-def _top_drives(drive_state: dict[str, Any]) -> list[dict[str, Any]]:
-    drives = drive_state.get("top_drives", []) or []
-    normalized: list[dict[str, Any]] = []
-    for drive in drives[:3]:
-        if not isinstance(drive, dict):
-            continue
-        normalized.append({
-            "name": drive.get("name", "unknown"),
-            "value": _bounded_float(drive.get("value")),
-            "target": drive.get("target") or "",
-        })
-    return normalized
+def _normalize_theme_list(items: Any) -> list[str]:
+    if not isinstance(items, list):
+        return []
+
+    normalized: list[str] = []
+    for item in items:
+        label = _normalize_theme_item(item)
+        if label and label not in normalized:
+            normalized.append(label)
+    return normalized[:6]
+
+
+def _normalize_theme_item(item: Any) -> str:
+    if isinstance(item, str):
+        return _truncate_text(item.strip(), limit=60)
+
+    if isinstance(item, dict):
+        for key in ("theme", "label", "name", "target", "value", "event_type", "source"):
+            value = item.get(key)
+            if value:
+                normalized = _normalize_theme_item(value)
+                if normalized:
+                    return normalized
+        serialized = json.dumps(item, ensure_ascii=False, default=str)
+        return _truncate_text(serialized, limit=60)
+
+    if isinstance(item, (list, tuple, set)):
+        parts = [_normalize_theme_item(value) for value in list(item)[:3]]
+        filtered = [part for part in parts if part]
+        return _truncate_text(" / ".join(filtered), limit=60)
+
+    if item is None:
+        return ""
+
+    return _truncate_text(str(item), limit=60)
+
+
+def _summarize_source(source: Any) -> str:
+    if isinstance(source, str):
+        return _truncate_text(source.strip(), limit=96)
+
+    if isinstance(source, dict):
+        for key in ("source", "summary", "text", "message", "content"):
+            value = source.get(key)
+            if value:
+                return _summarize_source(value)
+        parts = []
+        for key in ("theme", "target", "name", "label"):
+            value = source.get(key)
+            if value:
+                normalized = _normalize_theme_item(value)
+                if normalized:
+                    parts.append(normalized)
+        if parts:
+            return _truncate_text(" / ".join(parts), limit=96)
+        return ""
+
+    if isinstance(source, (list, tuple, set)):
+        parts = [_summarize_source(item) for item in list(source)[:3]]
+        filtered = [part for part in parts if part]
+        return _truncate_text(" / ".join(filtered), limit=96)
+
+    if source is None:
+        return ""
+
+    return _truncate_text(str(source), limit=96)
+
+
+def _truncate_text(text: str, *, limit: int) -> str:
+    stripped = text.strip()
+    if len(stripped) <= limit:
+        return stripped
+    return f"{stripped[: limit - 1].rstrip()}…"
 
 
 def _build_story_steps(snapshot: dict[str, Any]) -> list[dict[str, str]]:
-    drive = snapshot.get("drive", {}) or {}
-    policy = snapshot.get("policy", {}) or {}
-    supervisor = snapshot.get("supervisor", {}) or {}
-    signature = drive.get("latent_drive_signature", {}) or {}
-    blocked = list(policy.get("blocked_by_inhibition", []) or [])
+    appraisal = snapshot.get("appraisal", {}) or {}
+    conflict = snapshot.get("conflict", {}) or {}
+    expression = snapshot.get("expression", {}) or {}
+    pacing = snapshot.get("pacing", {}) or {}
+    fidelity = snapshot.get("fidelity", {}) or {}
+    blocked = list(conflict.get("forbidden_moves", []) or [])
 
     steps = [
         {
-            "stage": "Drive",
-            "value": str(drive.get("primary_drive") or "none"),
-            "note": f"Intensity {drive.get('intensity', 0.0):.2f}",
+            "stage": "Appraisal",
+            "value": str(appraisal.get("event_type") or "none"),
+            "note": f"Confidence {appraisal.get('confidence', 0.0):.2f}",
             "tone": "drive",
         },
         {
-            "stage": "Target",
-            "value": str(drive.get("top_target") or "unfixed"),
-            "note": str(drive.get("secondary_drive") or "single-track"),
+            "stage": "Tension",
+            "value": str(appraisal.get("target_of_tension") or "unfixed"),
+            "note": str(appraisal.get("stakes") or "low"),
             "tone": "target",
         },
         {
-            "stage": "Inhibition",
+            "stage": "Superego",
             "value": ", ".join(blocked[:2]) if blocked else "clear",
             "note": (
-                f"Suppression {drive.get('suppression_load', 0.0):.2f}"
+                f"Pressure {conflict.get('superego_pressure', 0.0):.2f}"
                 if blocked
                 else "No visible block"
             ),
             "tone": "block" if blocked else "open",
         },
         {
-            "stage": "Mode",
-            "value": str(policy.get("selected_mode") or "none"),
-            "note": f"Leakage {supervisor.get('leakage_level', 0.0):.2f}",
+            "stage": "Ego Move",
+            "value": str(conflict.get("social_move") or "none"),
+            "note": f"Stability {conflict.get('stability', 0.0):.2f}",
             "tone": "mode",
         },
         {
-            "stage": "Surface",
-            "value": str(signature.get("latent_signal_hint") or "contained"),
-            "note": str(policy.get("satisfaction_goal") or "hold state"),
+            "stage": "Expression",
+            "value": str(expression.get("temperature") or "contained"),
+            "note": str(conflict.get("visible_emotion") or "hold state"),
             "tone": "surface",
+        },
+        {
+            "stage": "Fidelity",
+            "value": "pass" if fidelity.get("passed") else "warn",
+            "note": (
+                f"anti-exposition {fidelity.get('anti_exposition', 0.0):.2f}"
+                if fidelity
+                else "not checked"
+            ),
+            "tone": "target",
+        },
+        {
+            "stage": "Relationship",
+            "value": str(pacing.get("relationship_stage") or "untracked"),
+            "note": (
+                "escalation allowed"
+                if pacing.get("escalation_allowed")
+                else "escalation held"
+            ),
+            "tone": "target",
         },
     ]
     return steps
 
 
-def _build_drive_story(snapshot: dict[str, Any]) -> str:
-    drive = snapshot.get("drive", {}) or {}
-    policy = snapshot.get("policy", {}) or {}
-    signature = drive.get("latent_drive_signature", {}) or {}
-    primary_drive = str(drive.get("primary_drive") or "").strip()
-    if not primary_drive:
-        return "No active drive loop yet."
+def _build_conflict_story(snapshot: dict[str, Any]) -> str:
+    conflict = snapshot.get("conflict", {}) or {}
+    appraisal = snapshot.get("appraisal", {}) or {}
+    dominant_want = str(conflict.get("dominant_want") or "").strip()
+    if not dominant_want:
+        return "No active conflict loop yet."
 
-    target = str(drive.get("top_target") or "an unfixed target")
-    selected_mode = str(policy.get("selected_mode") or "an unresolved mode")
-    blocked = list(policy.get("blocked_by_inhibition", []) or [])
-    latent_signal = str(signature.get("latent_signal_hint") or "contained residue")
-    satisfaction_goal = str(policy.get("satisfaction_goal") or "stabilize the interaction")
-
-    story = f"{primary_drive} is aimed at {target}"
+    target = str(conflict.get("target") or "an unfixed target")
+    social_move = str(conflict.get("social_move") or "an unresolved move")
+    blocked = list(conflict.get("forbidden_moves", []) or [])
+    residue = str(conflict.get("visible_emotion") or "contained residue")
+    story = f"{dominant_want} is aimed at {target}"
     if blocked:
         story += f", held back by {', '.join(blocked[:2])}"
-    story += f", then converted into {selected_mode}"
-    story += f" with {latent_signal} on the surface"
-    story += f". Current goal: {satisfaction_goal}."
+    story += f", then converted into {social_move}"
+    story += f" with {residue} left on the surface"
+    if appraisal.get("summary_short"):
+        story += f". Appraisal: {appraisal.get('summary_short')}."
     return story
 
 
 def _build_residue_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
-    drive = snapshot.get("drive", {}) or {}
+    conflict = snapshot.get("conflict", {}) or {}
+    expression = snapshot.get("expression", {}) or {}
     tones = {
-        "intensity": "heat",
-        "frustration": "risk",
-        "carryover": "carry",
-        "suppression_load": "block",
-        "satiation": "release",
+        "id_intensity": "heat",
+        "superego_pressure": "risk",
+        "residue_intensity": "carry",
+        "directness": "block",
+        "closure": "release",
     }
     labels = {
-        "intensity": "Intensity",
-        "frustration": "Frustration",
-        "carryover": "Carryover",
-        "suppression_load": "Suppression",
-        "satiation": "Satiation",
+        "id_intensity": "Id Intensity",
+        "superego_pressure": "Superego Pressure",
+        "residue_intensity": "Residue Intensity",
+        "directness": "Directness",
+        "closure": "Closure",
     }
     rows: list[dict[str, Any]] = []
     for key in AFFECT_METRICS:
         rows.append({
             "key": key,
             "label": labels[key],
-            "value": _bounded_float(drive.get(key)),
+            "value": _bounded_float(conflict.get(key) if key in conflict else expression.get(key)),
             "tone": tones[key],
         })
     return rows
+
+
+def _build_expression_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    expression = snapshot.get("expression", {}) or {}
+    return [
+        {
+            "key": "length",
+            "label": "Length",
+            "value": str(expression.get("length") or "none"),
+        },
+        {
+            "key": "temperature",
+            "label": "Temperature",
+            "value": str(expression.get("temperature") or "none"),
+        },
+        {
+            "key": "directness",
+            "label": "Directness",
+            "value": f"{_bounded_float(expression.get('directness')):.2f}",
+        },
+    ]
+
+
+def _build_pacing_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    pacing = snapshot.get("pacing", {}) or {}
+    return [
+        {"key": "relationship_stage", "label": "Stage", "value": str(pacing.get("relationship_stage") or "none")},
+        {"key": "commitment_readiness", "label": "Readiness", "value": f"{_bounded_float(pacing.get('commitment_readiness')):.2f}"},
+        {"key": "repair_depth", "label": "Repair depth", "value": f"{_bounded_float(pacing.get('repair_depth')):.2f}"},
+        {"key": "escalation_allowed", "label": "Escalation", "value": "yes" if pacing.get("escalation_allowed") else "no"},
+    ]
+
+
+def _build_fidelity_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    fidelity = snapshot.get("fidelity", {}) or {}
+    rows = [
+        {"key": "passed", "label": "Passed", "value": "yes" if fidelity.get("passed") else "no"},
+        {"key": "move_fidelity", "label": "Move fidelity", "value": f"{_bounded_float(fidelity.get('move_fidelity')):.2f}"},
+        {"key": "warnings", "label": "Warnings", "value": ", ".join(fidelity.get("warnings", []) or []) or "none"},
+    ]
+    return rows
+
+
+def _build_conflict_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    conflict = snapshot.get("conflict", {}) or {}
+    return [
+        {
+            "key": "dominant_want",
+            "label": "Dominant want",
+            "value": str(conflict.get("dominant_want") or "none"),
+            "target": str(conflict.get("target") or ""),
+        },
+        {
+            "key": "social_move",
+            "label": "Social move",
+            "value": str(conflict.get("social_move") or "none"),
+            "target": "",
+        },
+        {
+            "key": "residue",
+            "label": "Residue",
+            "value": str(conflict.get("visible_emotion") or "none"),
+            "target": "",
+        }
+    ]
 
 
 def _bounded_float(value: Any) -> float:
@@ -459,4 +579,18 @@ def _extract_timing(trace: dict[str, Any]) -> dict[str, Any]:
     return {
         "nodes": nodes,
         "total_ms": round(total_ms, 2),
+    }
+
+
+def _appraisal_dimensions(appraisal: dict[str, Any]) -> dict[str, float]:
+    target = str(appraisal.get("target_of_tension") or "")
+    stakes = str(appraisal.get("stakes") or "low")
+    stake_value = {"low": 0.2, "medium": 0.6, "high": 1.0}.get(stakes, 0.0)
+    return {
+        "confidence": _bounded_float(appraisal.get("confidence")),
+        "stakes": _bounded_float(stake_value),
+        "closeness_axis": 1.0 if target == "closeness" else 0.0,
+        "pride_axis": 1.0 if target == "pride" else 0.0,
+        "jealousy_axis": 1.0 if target == "jealousy" else 0.0,
+        "ambiguity_axis": 1.0 if target == "ambiguity" else 0.0,
     }

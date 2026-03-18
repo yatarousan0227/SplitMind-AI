@@ -1,90 +1,170 @@
 # Implementation Overview Guide
 
-This guide describes how the current codebase executes a turn. It is based on the implementation under `src/`, not only on future plans.
+This guide summarizes how one turn executes in the current `src/` implementation.
 
 ```mermaid
 flowchart LR
     A["runtime.py / ui/app.py"] --> B["app/graph.py"]
-    B --> C["nodes/*"]
-    C --> D["rules/state_updates.py"]
-    D --> E["memory/vault_store.py"]
+    B --> C["session_bootstrap"]
+    C --> D["appraisal"]
+    D --> E["conflict_engine"]
+    E --> F["expression_realizer"]
+    F --> G["fidelity_gate"]
+    G --> H["memory_commit"]
+    H --> I["vault_store / dashboard snapshots"]
 ```
 
 ## Entry Points
 
 ### CLI
 
-The CLI entry point is `src/splitmind_ai/app/runtime.py`.
+The CLI entry point is [runtime.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/app/runtime.py).
 
 - `run_turn`
-  Executes one turn and returns the response plus trace data.
+  Executes one turn and returns the resulting state.
 - `run_session`
-  Runs a terminal chat loop and keeps session state across turns.
+  Runs a terminal multi-turn loop.
 
 ### Streamlit UI
 
-The research UI entry point is `src/splitmind_ai/ui/app.py`.
+The research UI entry point is [app.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/ui/app.py).
 
-It wraps the same runtime graph, then keeps chat history, traces, and dashboard snapshots inside Streamlit session state.
+It uses the same graph while keeping:
 
-## High-Level Execution Flow
+- chat history
+- traces
+- turn snapshots
+- dashboard view-models
 
-The graph is built in `src/splitmind_ai/app/graph.py` and coordinates the main nodes:
+inside Streamlit session state.
 
-1. `SessionBootstrapNode`
-2. `InternalDynamicsNode`
-3. `MotivationalStateNode`
-4. `SocialCueNode`
-5. `AppraisalNode`
-6. `ActionArbitrationNode`
-7. `PersonaSupervisorNode`
-8. `UtterancePlannerNode`
-9. `SurfaceRealizationNode`
-10. `MemoryCommitNode`
+## Active Graph
 
-The exact state handed between nodes is typed through contracts and state slices.
+The graph is built in [graph.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/app/graph.py).
 
-## Where Major Responsibilities Live
+The default pipeline is:
 
-### Contracts
+1. `session_bootstrap`
+2. `appraisal`
+3. `conflict_engine`
+4. `expression_realizer`
+5. `fidelity_gate`
+6. `memory_commit`
+7. `error_handler`
 
-`src/splitmind_ai/contracts/` contains Pydantic models for structured outputs and internal data exchange.
+## Node Responsibilities
 
-### State
+### `SessionBootstrapNode`
 
-`src/splitmind_ai/state/` contains typed state slices such as relationship state, mood, drive state, inhibition state, and trace-friendly snapshots.
+- normalizes request and session data
+- loads persona
+- restores `relationship_state.durable`, mood, and memory from the vault
+- initializes `relationship_state.ephemeral` and `working_memory`
 
-### Prompts
+### `AppraisalNode`
 
-`src/splitmind_ai/prompts/` contains prompt builders for the internal dynamics and persona supervisor stages.
+Interprets the latest user message as a relational event and produces:
 
-### Rules
+- `event_type`
+- `valence`
+- `target_of_tension`
+- `stakes`
 
-`src/splitmind_ai/rules/state_updates.py` performs rule-based state transitions after model outputs are interpreted.
+inside `appraisal`.
 
-`src/splitmind_ai/rules/safety.py` applies explicit safety boundaries.
+### `ConflictEngineNode`
 
-### Memory
+Combines persona priors and `appraisal` into:
 
-`src/splitmind_ai/memory/vault_store.py` persists state into the Obsidian-style vault structure.
+- `id_impulse`
+- `superego_pressure`
+- `ego_move`
+- `residue`
+- `expression_envelope`
 
-### Evaluation
+inside `conflict_state`.
 
-`src/splitmind_ai/eval/` contains datasets, baselines, reporting, and observability helpers for comparative evaluation.
+### `ExpressionRealizerNode`
 
-## What To Read In Code First
+- produces exactly one final reply from `conflict_state` and `relationship_state`
+- uses structured prompts when an LLM is available
+- falls back to deterministic generation otherwise
+
+### `FidelityGateNode`
+
+Checks whether the realized response preserves the selected move and residue.
+
+It records:
+
+- `move_fidelity`
+- `residue_fidelity`
+- `structural_persona_fidelity`
+- `anti_exposition`
+- `hard_safety`
+
+in trace output.
+
+### `MemoryCommitNode`
+
+- updates `relationship_state` and `mood` with rules
+- persists only `relationship_state.durable`
+- updates memory candidates and working memory
+
+### `ErrorNode`
+
+Returns a fallback reply when a node fails or a contract breaks.
+
+## State Slices
+
+The important current slices are:
+
+- `request`
+- `response`
+- `persona`
+- `relationship_state`
+- `mood`
+- `memory`
+- `working_memory`
+- `appraisal`
+- `conflict_state`
+- `trace`
+- `_internal`
+
+The key design split is:
+
+1. `persona`
+   static personality structure
+2. `relational_profile`
+   static priors for relating to others
+3. `relationship_state`
+   dynamic state for this specific user
+
+## Prompt Layer
+
+Active prompt builders live in [conflict_pipeline.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/prompts/conflict_pipeline.py).
+
+The current rule is:
+
+- do not use persona as direct voice instructions
+- use psychodynamics, relational profile, defense, and ego organization as structural priors
+- derive expression from `conflict_state + relationship_state`
+
+## What To Read First
 
 If you want to understand behavior quickly, this order works well:
 
-1. `src/splitmind_ai/app/runtime.py`
-2. `src/splitmind_ai/app/graph.py`
-3. `src/splitmind_ai/nodes/internal_dynamics.py`
-4. `src/splitmind_ai/nodes/persona_supervisor.py`
-5. `src/splitmind_ai/rules/state_updates.py`
-6. `src/splitmind_ai/memory/vault_store.py`
+1. [runtime.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/app/runtime.py)
+2. [graph.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/app/graph.py)
+3. [appraisal.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/appraisal.py)
+4. [conflict_engine.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/conflict_engine.py)
+5. [expression_realizer.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/expression_realizer.py)
+6. [fidelity_gate.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/fidelity_gate.py)
+7. [memory_commit.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/memory_commit.py)
+8. [state_updates.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/rules/state_updates.py)
+9. [vault_store.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/memory/vault_store.py)
 
 ## Related Docs
 
-- [streamlit-ui.en.md](./streamlit-ui.en.md)
-- [docs/concept.en.md](../docs/concept.en.md)
-- [docs/implementation-plan/README.en.md](../docs/implementation-plan/README.en.md)
+- [streamlit-ui.en.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/guides/streamlit-ui.en.md)
+- [concept.en.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/concept.en.md)
+- [README.en.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/implementation-plan/README.en.md)

@@ -3,137 +3,63 @@
 import pytest
 
 from splitmind_ai.rules.state_updates import (
-    apply_relationship_rules,
+    apply_relationship_updates,
     generate_memory_candidates,
     run_full_update,
     update_mood,
-    update_unresolved_tensions,
+    update_relationship_state,
+    update_unresolved_tension_summary,
 )
 
 
-class TestApplyRelationshipRules:
-    def test_jealousy_trigger(self):
-        rel = {"trust": 0.5, "intimacy": 0.3, "tension": 0.1, "attachment_pull": 0.3}
-        updated, applied = apply_relationship_rules(
-            rel, {"jealousy_trigger": True}
+class TestApplyRelationshipUpdates:
+    def test_jealousy_trigger_updates_durable_and_ephemeral(self):
+        state = {
+            "durable": {"trust": 0.5, "intimacy": 0.3, "attachment_pull": 0.3},
+            "ephemeral": {"tension": 0.1, "recent_relational_charge": 0.0},
+        }
+        updated, applied = apply_relationship_updates(
+            state, {"jealousy_trigger": True}
         )
-        assert updated["tension"] == pytest.approx(0.17, abs=0.01)
-        assert updated["attachment_pull"] == pytest.approx(0.34, abs=0.01)
+        assert updated["ephemeral"]["tension"] == pytest.approx(0.17, abs=0.01)
+        assert updated["durable"]["attachment_pull"] == pytest.approx(0.34, abs=0.01)
         assert len(applied) > 0
 
-    def test_reassurance_received(self):
-        rel = {"trust": 0.5, "tension": 0.2}
-        updated, _ = apply_relationship_rules(
-            rel, {"reassurance_received": True}
+    def test_reassurance_received_settles_tension(self):
+        state = {
+            "durable": {"trust": 0.5, "repair_depth": 0.0},
+            "ephemeral": {"tension": 0.2},
+        }
+        updated, _ = apply_relationship_updates(
+            state, {"reassurance_received": True}
         )
-        assert updated["trust"] == pytest.approx(0.55, abs=0.01)
-        assert updated["tension"] == pytest.approx(0.12, abs=0.01)
-
-    def test_repair_attempt(self):
-        rel = {"trust": 0.5, "tension": 0.3}
-        updated, applied = apply_relationship_rules(
-            rel, {"repair_attempt": True}
-        )
-        assert updated["tension"] < 0.3
-        assert updated["trust"] > 0.5
-
-    def test_user_praised_third_party(self):
-        rel = {"tension": 0.1, "attachment_pull": 0.3}
-        updated, _ = apply_relationship_rules(
-            rel, {"user_praised_third_party": True}
-        )
-        assert updated["tension"] > 0.1
-        assert updated["attachment_pull"] > 0.3
-
-    def test_no_active_flags(self):
-        rel = {"trust": 0.5, "tension": 0.1}
-        updated, applied = apply_relationship_rules(
-            rel, {"jealousy_trigger": False}
-        )
-        assert updated["trust"] == 0.5
-        assert updated["tension"] == pytest.approx(0.09, abs=0.01)
-        assert len(applied) == 1
-
-    def test_values_clamped(self):
-        rel = {"trust": 0.99, "tension": 0.01}
-        updated, _ = apply_relationship_rules(
-            rel, {"reassurance_received": True}
-        )
-        assert updated["trust"] <= 1.0
-        assert updated["tension"] >= 0.0
+        assert updated["durable"]["trust"] == pytest.approx(0.55, abs=0.01)
+        assert updated["ephemeral"]["tension"] == pytest.approx(0.12, abs=0.01)
 
 
-class TestUpdateUnresolvedTensions:
-    def test_adds_new_tension(self):
-        result = update_unresolved_tensions(
-            unresolved=[],
-            dominant_desire="jealousy",
-            affective_pressure=0.7,
-            user_message="I had fun with others",
+class TestUpdateUnresolvedTensionSummary:
+    def test_adds_new_summary_when_pressure_is_high(self):
+        result = update_unresolved_tension_summary(
+            unresolved_summary=[],
+            appraisal={"event_type": "repair_offer", "target_of_tension": "pride"},
+            conflict_state={
+                "id_impulse": {"dominant_want": "move_closer", "intensity": 0.7},
+                "superego_pressure": {"pressure": 0.6},
+                "residue": {"visible_emotion": "pleased_but_guarded", "intensity": 0.4},
+            },
             event_flags={},
         )
         assert len(result) == 1
-        assert result[0]["theme"] == "jealousy"
-        assert "last_reinforced_at" in result[0]
+        assert "repair_offer" in result[0]
 
-    def test_reinforces_existing(self):
-        existing = [{"theme": "jealousy", "intensity": 0.5, "source": "x",
-                      "created_at": "2026-01-01", "last_reinforced_at": "2026-01-01"}]
-        result = update_unresolved_tensions(
-            unresolved=existing,
-            dominant_desire="jealousy",
-            affective_pressure=0.7,
-            user_message="Again",
-            event_flags={},
+    def test_repair_drops_oldest_summary(self):
+        result = update_unresolved_tension_summary(
+            unresolved_summary=["old tension", "older tension"],
+            appraisal={},
+            conflict_state={},
+            event_flags={"repair_attempt": True},
         )
-        assert len(result) == 1
-        assert result[0]["intensity"] > 0.5
-
-    def test_decays_on_reassurance(self):
-        existing = [{"theme": "fear", "intensity": 0.3, "source": "x",
-                      "created_at": "2026-01-01", "last_reinforced_at": "2026-01-01"}]
-        result = update_unresolved_tensions(
-            unresolved=existing,
-            dominant_desire="neutral",
-            affective_pressure=0.2,
-            user_message="You matter",
-            event_flags={"reassurance_received": True},
-        )
-        assert result[0]["intensity"] < 0.3
-
-    def test_passively_decays_without_reinforcement(self):
-        existing = [{"theme": "fear", "intensity": 0.3, "source": "x",
-                      "created_at": "2026-01-01", "last_reinforced_at": "2026-01-01"}]
-        result = update_unresolved_tensions(
-            unresolved=existing,
-            dominant_desire="neutral",
-            affective_pressure=0.2,
-            user_message="small talk",
-            event_flags={},
-        )
-        assert result[0]["intensity"] == pytest.approx(0.28, abs=0.01)
-
-    def test_prunes_low_intensity(self):
-        existing = [{"theme": "old", "intensity": 0.04, "source": "x",
-                      "created_at": "2026-01-01", "last_reinforced_at": "2026-01-01"}]
-        result = update_unresolved_tensions(
-            unresolved=existing,
-            dominant_desire="",
-            affective_pressure=0.1,
-            user_message="",
-            event_flags={},
-        )
-        assert len(result) == 0
-
-    def test_no_addition_below_threshold(self):
-        result = update_unresolved_tensions(
-            unresolved=[],
-            dominant_desire="jealousy",
-            affective_pressure=0.3,  # below 0.5
-            user_message="",
-            event_flags={},
-        )
-        assert len(result) == 0
+        assert result == ["older tension"]
 
 
 class TestUpdateMood:
@@ -143,124 +69,103 @@ class TestUpdateMood:
         assert result["base_mood"] == "irritated"
         assert result["irritation"] > 0
 
-    def test_rejection_shifts_to_withdrawn(self):
-        mood = {"base_mood": "calm", "turns_since_shift": 0}
-        result = update_mood(mood, {"rejection_signal": True})
-        assert result["base_mood"] == "withdrawn"
-
-    def test_affectionate_shifts_to_playful(self):
-        mood = {"base_mood": "calm", "openness": 0.5, "turns_since_shift": 0}
-        result = update_mood(mood, {"affectionate_exchange": True})
-        assert result["base_mood"] == "playful"
-        assert result["openness"] > 0.5
-
-    def test_reassurance_recovers_from_irritated(self):
-        mood = {"base_mood": "irritated", "turns_since_shift": 0}
-        result = update_mood(mood, {"reassurance_received": True})
-        assert result["base_mood"] == "calm"
-
-    def test_natural_decay_after_turns(self):
-        mood = {"base_mood": "irritated", "irritation": 0.5, "longing": 0.3,
-                "protectiveness": 0.2, "fatigue": 0.1, "turns_since_shift": 3}
-        result = update_mood(mood, {})
-        assert result["irritation"] < 0.5
-        assert result["longing"] < 0.3
-
-    def test_user_praised_third_party_mood(self):
-        mood = {"base_mood": "calm", "irritation": 0.0, "turns_since_shift": 0}
-        result = update_mood(mood, {"user_praised_third_party": True})
-        assert result["base_mood"] == "irritated"
-
 
 class TestGenerateMemoryCandidates:
-    def test_generates_emotional_memory_on_high_pressure(self):
+    def test_generates_emotional_memory_from_conflict_state(self):
         result = generate_memory_candidates(
             user_message="I had so much fun with them",
             final_response="Oh really",
             event_flags={"jealousy_trigger": True},
-            dynamics={"affective_pressure": 0.7, "dominant_desire": "jealousy"},
+            appraisal={"event_type": "provocation", "target_of_tension": "jealousy"},
+            conflict_state={
+                "id_impulse": {"dominant_want": "be_first_for_user", "intensity": 0.7, "target": "user"},
+                "superego_pressure": {"pressure": 0.6},
+                "ego_move": {"social_move": "accept_but_hold"},
+                "residue": {"visible_emotion": "irritated", "intensity": 0.5},
+            },
             session_id="s1",
             turn_number=3,
         )
         assert len(result["emotional_memories"]) == 1
         em = result["emotional_memories"][0]
-        # emotion is mapped from dominant_desire via _map_desire_to_emotion
-        assert em["emotion"] == "irritation"
-        assert em["trigger"] == "jealousy"
-        assert em["session_id"] == "s1"
-        assert em["turn_number"] == 3
-        assert "agent_response" in em
+        assert em["emotion"] == "jealousy"
+        assert em["trigger"] == "provocation"
+        assert em["residual_drive"] == "be_first_for_user"
 
-    def test_emotional_memory_desire_mapping(self):
-        result = generate_memory_candidates(
-            user_message="Please tell me you care",
-            final_response="...",
-            event_flags={},
-            dynamics={"affective_pressure": 0.6, "dominant_desire": "fear_of_rejection"},
-        )
-        assert result["emotional_memories"][0]["emotion"] == "anxiety"
-        assert result["emotional_memories"][0]["trigger"] == "fear_of_rejection"
 
-    def test_no_memory_on_low_pressure(self):
-        result = generate_memory_candidates(
-            user_message="Hello",
-            final_response="Hi",
-            event_flags={},
-            dynamics={"affective_pressure": 0.2, "dominant_desire": "neutral"},
+class TestUpdateRelationshipState:
+    def test_repair_offer_improves_durable_state(self):
+        state = {
+            "durable": {
+                "trust": 0.5,
+                "intimacy": 0.3,
+                "distance": 0.5,
+                "attachment_pull": 0.3,
+                "relationship_stage": "warming",
+                "commitment_readiness": 0.2,
+                "repair_depth": 0.0,
+            },
+            "ephemeral": {
+                "tension": 0.1,
+                "recent_relational_charge": 0.0,
+                "escalation_allowed": False,
+                "interaction_fragility": 0.1,
+                "turn_local_repair_opening": 0.0,
+            },
+        }
+        result = update_relationship_state(
+            relationship_state=state,
+            appraisal={"event_type": "repair_offer", "target_of_tension": "pride"},
+            conflict_state={
+                "id_impulse": {"intensity": 0.4},
+                "residue": {"intensity": 0.3},
+                "ego_move": {"social_move": "accept_but_hold"},
+            },
+            event_flags={"repair_attempt": True},
         )
-        assert len(result["emotional_memories"]) == 0
 
-    def test_semantic_preference_on_affectionate_exchange(self):
-        result = generate_memory_candidates(
-            user_message="I love talking with you about music",
-            final_response="Me too",
-            event_flags={"affectionate_exchange": True},
-            dynamics={"affective_pressure": 0.3, "dominant_desire": ""},
-        )
-        assert len(result["semantic_preferences"]) == 1
-        assert result["semantic_preferences"][0]["topic"] == "affectionate_context"
-        assert "music" in result["semantic_preferences"][0]["preference"]
-
-    def test_no_semantic_preference_without_flag(self):
-        result = generate_memory_candidates(
-            user_message="Hello",
-            final_response="Hi",
-            event_flags={},
-            dynamics={"affective_pressure": 0.2, "dominant_desire": ""},
-        )
-        assert len(result["semantic_preferences"]) == 0
-
-    def test_content_length_limits(self):
-        long_msg = "x" * 500
-        long_resp = "y" * 500
-        result = generate_memory_candidates(
-            user_message=long_msg,
-            final_response=long_resp,
-            event_flags={},
-            dynamics={"affective_pressure": 0.8, "dominant_desire": "jealousy"},
-        )
-        em = result["emotional_memories"][0]
-        assert len(em["event"]) <= 300
-        assert len(em["agent_response"]) <= 300
+        assert result["durable"]["trust"] > 0.5
+        assert result["durable"]["repair_depth"] > 0.0
+        assert result["ephemeral"]["turn_local_repair_opening"] > 0.0
 
 
 class TestRunFullUpdate:
     def test_full_pipeline(self):
         result = run_full_update(
-            relationship={"trust": 0.5, "intimacy": 0.3, "distance": 0.5,
-                           "tension": 0.1, "attachment_pull": 0.3,
-                           "unresolved_tensions": []},
-            mood={"base_mood": "calm", "irritation": 0.0, "longing": 0.0,
-                  "protectiveness": 0.0, "fatigue": 0.0, "openness": 0.5,
-                  "turns_since_shift": 0},
+            relationship_state={
+                "durable": {
+                    "trust": 0.5,
+                    "intimacy": 0.3,
+                    "distance": 0.5,
+                    "attachment_pull": 0.3,
+                    "relationship_stage": "warming",
+                    "commitment_readiness": 0.2,
+                    "repair_depth": 0.0,
+                    "unresolved_tension_summary": [],
+                },
+                "ephemeral": {
+                    "tension": 0.1,
+                    "recent_relational_charge": 0.0,
+                    "escalation_allowed": False,
+                    "interaction_fragility": 0.0,
+                    "turn_local_repair_opening": 0.0,
+                },
+            },
+            mood={"base_mood": "calm", "irritation": 0.0, "longing": 0.0, "protectiveness": 0.0, "fatigue": 0.0, "openness": 0.5, "turns_since_shift": 0},
             event_flags={"jealousy_trigger": True},
-            dynamics={"dominant_desire": "jealousy", "affective_pressure": 0.7},
+            appraisal={"event_type": "provocation", "target_of_tension": "jealousy"},
+            conflict_state={
+                "id_impulse": {"dominant_want": "be_first_for_user", "intensity": 0.7, "target": "user"},
+                "superego_pressure": {"pressure": 0.6},
+                "ego_move": {"social_move": "accept_but_hold"},
+                "residue": {"visible_emotion": "irritated", "intensity": 0.5},
+            },
             request={"user_message": "I had fun with others"},
             response={"final_response_text": "Oh really"},
         )
 
-        assert result["relationship"]["tension"] > 0.1
+        assert result["relationship_state"]["ephemeral"]["tension"] > 0.1
         assert result["mood"]["base_mood"] == "irritated"
-        assert len(result["relationship"]["unresolved_tensions"]) == 1
+        assert len(result["relationship_state"]["durable"]["unresolved_tension_summary"]) == 1
         assert len(result["memory_candidates"]["emotional_memories"]) == 1
         assert len(result["applied_rules"]) > 0

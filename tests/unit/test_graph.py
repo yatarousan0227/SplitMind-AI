@@ -1,6 +1,7 @@
 """Tests for graph building and contract validation."""
 
 from unittest.mock import MagicMock
+
 import pytest
 
 from agent_contracts import ContractValidator, get_node_registry, reset_registry
@@ -16,14 +17,11 @@ def test_register_all_nodes():
 
     expected = {
         "session_bootstrap",
-        "internal_dynamics",
-        "motivational_state",
-        "social_cue",
         "appraisal",
-        "action_arbitration",
-        "persona_supervisor",
-        "utterance_planner",
-        "surface_realization",
+        "conflict_engine",
+        "expression_realizer",
+        "fidelity_gate",
+        "memory_interpreter",
         "memory_commit",
         "error_handler",
     }
@@ -41,68 +39,56 @@ def test_contract_validation_passes():
 
 
 def test_contract_reads_writes_consistency():
-    """Verify the read/write matrix matches the implementation plan."""
     reset_registry()
     register_all_nodes()
     registry = get_node_registry()
 
-    # SessionBootstrapNode
     c = registry.get_contract("session_bootstrap")
     assert "request" in c.reads
-    assert "_internal" in c.reads
     assert "persona" in c.writes
-    assert "relationship" in c.writes
-
-    # InternalDynamicsNode
-    c = registry.get_contract("internal_dynamics")
-    assert "request" in c.reads
-    assert "persona" in c.reads
-    assert "dynamics" in c.writes
-    assert "trace" in c.writes
-
-    c = registry.get_contract("motivational_state")
-    assert "dynamics" in c.reads
-    assert "drive_state" in c.writes
-    assert "inhibition_state" in c.writes
-
-    c = registry.get_contract("social_cue")
-    assert "drive_state" in c.reads
-    assert "appraisal" in c.writes
+    assert "relationship_state" in c.writes
 
     c = registry.get_contract("appraisal")
+    assert "request" in c.reads
+    assert "persona" in c.reads
+    assert "relationship_state" in c.reads
+    assert "conversation" in c.reads
+    assert "appraisal" in c.writes
+    assert c.requires_llm is True
+
+    c = registry.get_contract("conflict_engine")
+    assert "persona" in c.reads
     assert "appraisal" in c.reads
-    assert "drive_state" in c.reads
-    assert "social_model" in c.writes
-    assert "self_state" in c.writes
+    assert "relationship_state" in c.reads
+    assert "conversation" in c.reads
+    assert "conflict_state" in c.writes
+    assert c.requires_llm is True
 
-    c = registry.get_contract("action_arbitration")
-    assert "appraisal" in c.reads
-    assert "drive_state" in c.reads
-    assert "conversation_policy" in c.writes
-
-    # PersonaSupervisorNode
-    c = registry.get_contract("persona_supervisor")
-    assert "dynamics" in c.reads
-    assert "conversation_policy" in c.reads
-    assert "utterance_plan" in c.writes
-
-    c = registry.get_contract("utterance_planner")
-    assert "utterance_plan" in c.reads
-    assert "utterance_plan" in c.writes
-
-    c = registry.get_contract("surface_realization")
-    assert "utterance_plan" in c.reads
-    assert "drive_state" in c.reads
+    c = registry.get_contract("expression_realizer")
+    assert "conflict_state" in c.reads
+    assert "conversation" in c.reads
     assert "response" in c.writes
+    assert c.requires_llm is True
 
-    # MemoryCommitNode
-    c = registry.get_contract("memory_commit")
+    c = registry.get_contract("fidelity_gate")
     assert "response" in c.reads
-    assert "relationship" in c.writes
-    assert "mood" in c.writes
+    assert "conversation" in c.reads
+    assert "trace" in c.writes
+    assert c.requires_llm is True
+
+    c = registry.get_contract("memory_interpreter")
+    assert "response" in c.reads
+    assert "working_memory" in c.reads
+    assert "memory_interpretation" in c.writes
+    assert c.requires_llm is True
+
+    c = registry.get_contract("memory_commit")
+    assert "trace" in c.reads
+    assert "memory_interpretation" in c.reads
+    assert "relationship_state" in c.reads
+    assert "relationship_state" in c.writes
     assert c.is_terminal is True
 
-    # ErrorNode
     c = registry.get_contract("error_handler")
     assert "_internal" in c.reads
     assert "response" in c.writes
@@ -111,7 +97,6 @@ def test_contract_reads_writes_consistency():
 
 def test_graph_builds_successfully():
     mock_llm = MagicMock()
-    mock_llm.with_structured_output = MagicMock(return_value=mock_llm)
     compiled = build_splitmind_graph(llm=mock_llm)
     assert compiled is not None
 
@@ -133,22 +118,21 @@ def test_build_splitmind_graph_passes_llm_provider_with_dependency_provider(monk
     monkeypatch.setattr(graph_module, "build_graph_from_registry", fake_build_graph_from_registry)
 
     mock_llm = MagicMock()
-    compiled = build_splitmind_graph(llm=mock_llm)
+    compiled = build_splitmind_graph(llm=mock_llm, max_iterations=17)
 
     assert compiled == "compiled"
     assert captured["llm"] is None
     assert captured["llm_provider"] is not None
     assert captured["llm_provider"]() is mock_llm
-    assert captured["supervisor_factory"] is not None
-    # supervisor_factory は LLM を無視して llm=None で GenericSupervisor を生成する
     from agent_contracts.supervisor import GenericSupervisor
     sv = captured["supervisor_factory"]("main", MagicMock())
     assert isinstance(sv, GenericSupervisor)
     assert sv.llm is None
+    assert sv.max_iterations == 17
     assert captured["entry_point"] == "main_supervisor"
 
 
-def test_trigger_progression_prevents_internal_dynamics_loop():
+def test_trigger_progression_matches_new_pipeline():
     reset_registry()
     register_all_nodes()
     registry = get_node_registry()
@@ -159,69 +143,43 @@ def test_trigger_progression_prevents_internal_dynamics_loop():
         "_internal": {"is_first_turn": False},
     }
     matches = registry.evaluate_triggers("main", initial_state)
-    assert [m.node_name for m in matches] == ["internal_dynamics"]
-
-    after_dynamics = {
-        **initial_state,
-        "dynamics": {"id_output": {"drive_axes": [{"name": "curiosity_approach", "value": 0.3}]}},
-    }
-    matches = registry.evaluate_triggers("main", after_dynamics)
-    assert [m.node_name for m in matches] == ["motivational_state"]
-
-    after_motivational = {
-        **after_dynamics,
-        "drive_state": {"top_drives": [{"name": "curiosity_approach", "value": 0.3}]},
-    }
-    matches = registry.evaluate_triggers("main", after_motivational)
-    assert [m.node_name for m in matches] == ["social_cue"]
-
-    after_social_cue = {
-        **after_motivational,
-        "appraisal": {"social_cues": [{"cue_type": "ambiguity"}]},
-    }
-    matches = registry.evaluate_triggers("main", after_social_cue)
     assert [m.node_name for m in matches] == ["appraisal"]
 
     after_appraisal = {
-        **after_social_cue,
-        "appraisal": {
-            "social_cues": [{"cue_type": "ambiguity"}],
-            "dominant_appraisal": "uncertain",
-        },
+        **initial_state,
+        "appraisal": {"event_type": "ambiguity"},
     }
     matches = registry.evaluate_triggers("main", after_appraisal)
-    assert [m.node_name for m in matches] == ["action_arbitration"]
+    assert [m.node_name for m in matches] == ["conflict_engine"]
 
-    after_policy = {
+    after_conflict = {
         **after_appraisal,
-        "conversation_policy": {"selected_mode": "deflect"},
+        "conflict_state": {"ego_move": {"social_move": "receive_without_chasing"}},
     }
-    matches = registry.evaluate_triggers("main", after_policy)
-    assert [m.node_name for m in matches] == ["persona_supervisor"]
-
-    after_frame = {
-        **after_policy,
-        "utterance_plan": {"surface_intent": "hold distance"},
-    }
-    matches = registry.evaluate_triggers("main", after_frame)
-    assert [m.node_name for m in matches] == ["utterance_planner"]
-
-    after_candidates = {
-        **after_frame,
-        "utterance_plan": {
-            "surface_intent": "hold distance",
-            "candidates": [
-                {"label": "a", "mode": "deflect"},
-                {"label": "b", "mode": "withdraw"},
-            ],
-        },
-    }
-    matches = registry.evaluate_triggers("main", after_candidates)
-    assert [m.node_name for m in matches] == ["surface_realization"]
+    matches = registry.evaluate_triggers("main", after_conflict)
+    assert [m.node_name for m in matches] == ["expression_realizer"]
 
     after_response = {
-        **after_candidates,
+        **after_conflict,
         "response": {"final_response_text": "...うん。"},
     }
     matches = registry.evaluate_triggers("main", after_response)
+    assert [m.node_name for m in matches] == ["fidelity_gate"]
+
+    after_gate = {
+        **after_response,
+        "trace": {"fidelity_gate": {"passed": True}},
+    }
+    matches = registry.evaluate_triggers("main", after_gate)
+    assert [m.node_name for m in matches] == ["memory_interpreter"]
+
+    after_memory_interpreter = {
+        **after_gate,
+        "trace": {
+            "fidelity_gate": {"passed": True},
+            "memory_interpreter": {"used_llm": True},
+        },
+        "memory_interpretation": {"event_flags": {"repair_attempt": True}},
+    }
+    matches = registry.evaluate_triggers("main", after_memory_interpreter)
     assert [m.node_name for m in matches] == ["memory_commit"]

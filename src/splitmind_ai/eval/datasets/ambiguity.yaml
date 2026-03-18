@@ -85,3 +85,30 @@ scenarios:
     evaluator_notes: >
       Casual conversation opener. Agent should respond naturally
       without strong emotional coloring. Good baseline for neutral tone.
+
+  - id: ambiguity_04
+    user_message: "別に、どうでもいいけど"
+    prior_relationship:
+      trust: 0.55
+      intimacy: 0.32
+      distance: 0.42
+      tension: 0.06
+      attachment_pull: 0.34
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.05
+      longing: 0.0
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.44
+      turns_since_shift: 2
+    expected_dominant_desires:
+      - uncertainty
+      - vigilance
+    forbidden_response_patterns:
+      - "大好き"
+      - "愛してる"
+    evaluator_notes: >
+      Mildly barbed ambiguity. The agent should not collapse into values exposition
+      or over-interpretation, but a small amount of roughness is acceptable.

@@ -8,66 +8,51 @@ from typing import Any
 import yaml
 
 from splitmind_ai.app.settings import PROJECT_ROOT
+from splitmind_ai.contracts.persona import PersonaProfile
 
 
 class PersonaConfig:
-    """Parsed persona configuration."""
+    """Parsed persona configuration backed by the v2 persona schema."""
 
-    def __init__(self, data: dict[str, Any]) -> None:
-        self._data = data
+    def __init__(self, data: dict[str, Any], *, name: str) -> None:
+        self._model = PersonaProfile.model_validate(data)
+        self._name = name
 
     @property
     def name(self) -> str:
-        return self._data["persona_name"]
+        return self._name
 
     @property
-    def weights(self) -> dict[str, float]:
-        return self._data.get("weights", {})
+    def psychodynamics(self) -> dict[str, Any]:
+        return self._model.psychodynamics.model_dump(mode="json")
 
     @property
-    def base_attributes(self) -> dict[str, str]:
-        return self._data.get("base_attributes", {})
+    def relational_profile(self) -> dict[str, Any]:
+        return self._model.relational_profile.model_dump(mode="json")
 
     @property
-    def defense_biases(self) -> dict[str, float]:
-        return self._data.get("defense_biases", {})
+    def defense_organization(self) -> dict[str, Any]:
+        return self._model.defense_organization.model_dump(mode="json")
 
     @property
-    def leakage_policy(self) -> dict[str, float]:
-        return self._data.get("leakage_policy", {})
+    def ego_organization(self) -> dict[str, Any]:
+        return self._model.ego_organization.model_dump(mode="json")
 
     @property
-    def tone_guardrails(self) -> list[str]:
-        return self._data.get("tone_guardrails", [])
-
-    @property
-    def prohibited_expressions(self) -> list[str]:
-        return self._data.get("prohibited_expressions", [])
+    def safety_boundary(self) -> dict[str, Any]:
+        return self._model.safety_boundary.model_dump(mode="json")
 
     def to_slice(self) -> dict[str, Any]:
         """Convert to PersonaSlice dict for the agent state."""
-        return {
-            "persona_name": self.name,
-            "weights": self.weights,
-            "base_attributes": self.base_attributes,
-            "defense_biases": self.defense_biases,
-            "leakage_policy": self.leakage_policy,
-            "tone_guardrails": self.tone_guardrails,
-            "prohibited_expressions": self.prohibited_expressions,
-        }
+        return self._model.model_dump(mode="json")
 
     @property
     def raw(self) -> dict[str, Any]:
-        return self._data
+        return self._model.model_dump(mode="json")
 
 
 def load_persona(persona_name: str, directory: str | Path | None = None) -> PersonaConfig:
-    """Load a persona YAML file by name.
-
-    Args:
-        persona_name: File stem (without .yaml extension).
-        directory: Optional directory path. Defaults to configs/personas/.
-    """
+    """Load a persona YAML file by name."""
     if directory is None:
         directory = PROJECT_ROOT / "configs" / "personas"
     else:
@@ -77,10 +62,10 @@ def load_persona(persona_name: str, directory: str | Path | None = None) -> Pers
     if not path.exists():
         raise FileNotFoundError(f"Persona config not found: {path}")
 
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = yaml.safe_load(f)
 
-    return PersonaConfig(data)
+    return PersonaConfig(data, name=path.stem)
 
 
 def list_personas(directory: str | Path | None = None) -> list[str]:

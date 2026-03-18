@@ -1,4 +1,4 @@
-"""Root agent state combining all slices."""
+"""Root agent state combining next-generation SplitMind-AI slices."""
 
 from __future__ import annotations
 
@@ -6,71 +6,54 @@ from typing import TypedDict
 
 from splitmind_ai.state.slices import (
     AppraisalSlice,
+    ConflictStateSlice,
     ConversationSlice,
-    ConversationPolicySlice,
-    DynamicsSlice,
     DriveStateSlice,
-    InhibitionStateSlice,
     InternalSlice,
     MemorySlice,
+    MemoryInterpretationSlice,
     MoodSlice,
     PersonaSlice,
-    RelationshipSlice,
+    RelationshipStateSlice,
     RequestSlice,
     ResponseSlice,
-    SelfStateSlice,
-    SocialModelSlice,
     TraceSlice,
-    UtterancePlanSlice,
     WorkingMemorySlice,
 )
 
 
 class SplitMindAgentState(TypedDict, total=False):
-    """Root state passed through the agent-contracts graph.
-
-    Each key corresponds to a named slice that nodes declare in
-    their ``reads`` / ``writes`` contracts.
-    """
+    """Root state passed through the graph."""
 
     request: RequestSlice
     response: ResponseSlice
     conversation: ConversationSlice
     persona: PersonaSlice
-    relationship: RelationshipSlice
+    relationship_state: RelationshipStateSlice
     mood: MoodSlice
     memory: MemorySlice
     appraisal: AppraisalSlice
-    social_model: SocialModelSlice
-    self_state: SelfStateSlice
+    conflict_state: ConflictStateSlice
     drive_state: DriveStateSlice
-    inhibition_state: InhibitionStateSlice
-    conversation_policy: ConversationPolicySlice
-    utterance_plan: UtterancePlanSlice
     working_memory: WorkingMemorySlice
-    dynamics: DynamicsSlice
+    memory_interpretation: MemoryInterpretationSlice
     trace: TraceSlice
     _internal: InternalSlice
 
 
-# All custom slice names that must be registered with the NodeRegistry.
 CUSTOM_SLICES: list[str] = [
     "request",
     "response",
     "conversation",
     "persona",
-    "relationship",
+    "relationship_state",
     "mood",
     "memory",
     "appraisal",
-    "social_model",
-    "self_state",
+    "conflict_state",
     "drive_state",
-    "inhibition_state",
-    "conversation_policy",
-    "utterance_plan",
     "working_memory",
-    "dynamics",
+    "memory_interpretation",
     "trace",
     "_internal",
 ]

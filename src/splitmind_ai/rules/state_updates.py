@@ -1,42 +1,56 @@
-"""Centralized rule-based state update engine.
-
-All relationship / mood / unresolved tension update logic lives here.
-MemoryCommitNode delegates to this module.
-"""
+"""Centralized rule-based state update engine for relationship persistence."""
 
 from __future__ import annotations
 
 from datetime import datetime
 from typing import Any
 
-# Default event-flag → state-delta rules (overridable via settings)
 DEFAULT_RULES: dict[str, dict[str, float]] = {
-    "reassurance_received": {"trust": 0.05, "tension": -0.05},
-    "rejection_signal": {"intimacy": -0.04, "distance": 0.06, "tension": 0.05},
-    "jealousy_trigger": {"tension": 0.07, "attachment_pull": 0.04},
-    "affectionate_exchange": {"intimacy": 0.06, "trust": 0.03},
-    "prolonged_avoidance": {"distance": 0.05},
-    "user_praised_third_party": {"tension": 0.05, "attachment_pull": 0.03},
-    "repair_attempt": {"tension": -0.06, "trust": 0.04},
+    "reassurance_received": {
+        "durable.trust": 0.05,
+        "ephemeral.tension": -0.05,
+        "durable.repair_depth": 0.03,
+    },
+    "rejection_signal": {
+        "durable.intimacy": -0.04,
+        "durable.distance": 0.06,
+        "ephemeral.tension": 0.05,
+        "ephemeral.interaction_fragility": 0.08,
+    },
+    "jealousy_trigger": {
+        "ephemeral.tension": 0.07,
+        "durable.attachment_pull": 0.04,
+        "ephemeral.recent_relational_charge": 0.06,
+    },
+    "affectionate_exchange": {
+        "durable.intimacy": 0.06,
+        "durable.trust": 0.03,
+        "ephemeral.recent_relational_charge": 0.08,
+    },
+    "prolonged_avoidance": {
+        "durable.distance": 0.05,
+        "ephemeral.interaction_fragility": 0.06,
+    },
+    "user_praised_third_party": {
+        "ephemeral.tension": 0.05,
+        "durable.attachment_pull": 0.03,
+        "ephemeral.recent_relational_charge": 0.05,
+    },
+    "repair_attempt": {
+        "ephemeral.tension": -0.06,
+        "durable.trust": 0.04,
+        "durable.repair_depth": 0.08,
+        "ephemeral.turn_local_repair_opening": 0.20,
+    },
 }
 
-# Themes that can appear as unresolved tensions
-TENSION_THEMES = frozenset({
-    "fear_of_replacement",
-    "fear_of_rejection",
-    "need_for_reassurance",
-    "shame_after_exposure",
-})
-
-# dominant_desire -> emotion label mapping
 _DESIRE_TO_EMOTION: dict[str, str] = {
-    "fear_of_replacement": "longing",
-    "need_for_reassurance": "longing",
-    "fear_of_rejection": "anxiety",
-    "shame_after_exposure": "shame",
-    "attachment_pull": "longing",
+    "be_first_for_user": "jealousy",
+    "move_closer": "longing",
+    "stay_safe": "anxiety",
+    "repair_bond": "relief",
+    "protect_self": "defensiveness",
     "jealousy": "irritation",
-    "protectiveness": "protectiveness",
 }
 
 _TENSION_ESCALATION_FLAGS = frozenset({
@@ -47,86 +61,66 @@ _TENSION_ESCALATION_FLAGS = frozenset({
 })
 
 
-def _map_desire_to_emotion(desire: str) -> str:
-    return _DESIRE_TO_EMOTION.get(desire, desire)
-
-
-def apply_relationship_rules(
-    relationship: dict[str, Any],
+def apply_relationship_updates(
+    relationship_state: dict[str, Any],
     event_flags: dict[str, bool],
     rules: dict[str, dict[str, float]] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
-    """Apply event-flag rules to relationship state.
-
-    Returns:
-        Tuple of (updated relationship dict, list of applied rule descriptions).
-    """
+    """Apply event-driven deltas to durable and ephemeral relationship state."""
     rules = rules or DEFAULT_RULES
-    relationship = dict(relationship)  # shallow copy
+    state = {
+        "durable": dict(relationship_state.get("durable", {}) or {}),
+        "ephemeral": dict(relationship_state.get("ephemeral", {}) or {}),
+    }
     applied: list[str] = []
 
     for flag, active in event_flags.items():
         if not active:
             continue
-        deltas = rules.get(flag, {})
-        for field, delta in deltas.items():
-            if field in relationship and isinstance(relationship[field], (int, float)):
-                relationship[field] = _clamp(relationship[field] + delta)
-                applied.append(f"{flag} -> {field} {delta:+.3f}")
+        for path, delta in (rules.get(flag) or {}).items():
+            section, field = path.split(".", 1)
+            bucket = state.get(section, {})
+            current = float(bucket.get(field, 0.0) or 0.0)
+            bucket[field] = _clamp(current + delta)
+            applied.append(f"{flag} -> {path} {delta:+.3f}")
 
-    if "tension" in relationship and isinstance(relationship["tension"], (int, float)):
-        settle_delta = _relationship_tension_settle(event_flags)
-        if settle_delta > 0.0:
-            relationship["tension"] = _clamp(relationship["tension"] - settle_delta)
-            applied.append(f"natural_settle -> tension {(-settle_delta):+.3f}")
+    settle_delta = _relationship_tension_settle(event_flags)
+    if settle_delta > 0.0:
+        current = float(state["ephemeral"].get("tension", 0.0) or 0.0)
+        state["ephemeral"]["tension"] = _clamp(current - settle_delta)
+        applied.append(f"natural_settle -> ephemeral.tension {(-settle_delta):+.3f}")
 
-    return relationship, applied
+    return state, applied
 
 
-def update_unresolved_tensions(
-    unresolved: list[dict[str, Any]],
-    dominant_desire: str,
-    affective_pressure: float,
-    user_message: str,
+def update_unresolved_tension_summary(
+    unresolved_summary: list[str],
+    appraisal: dict[str, Any],
+    conflict_state: dict[str, Any],
     event_flags: dict[str, bool],
-) -> list[dict[str, Any]]:
-    """Manage unresolved tension list: add, reinforce, decay, prune."""
-    unresolved = [dict(t) for t in unresolved]  # deep-ish copy
-    now = datetime.now().isoformat()
+) -> list[str]:
+    """Maintain a compact durable summary of unresolved relational tensions."""
+    summary = [str(item) for item in unresolved_summary if item][:4]
+    event_type = str(appraisal.get("event_type") or "")
+    tension_target = str(appraisal.get("target_of_tension") or "")
+    dominant_want = str((conflict_state.get("id_impulse") or {}).get("dominant_want") or "")
+    residue = str((conflict_state.get("residue") or {}).get("visible_emotion") or "")
+    intensity = max(
+        float((conflict_state.get("id_impulse") or {}).get("intensity", 0.0) or 0.0),
+        float((conflict_state.get("superego_pressure") or {}).get("pressure", 0.0) or 0.0),
+        float((conflict_state.get("residue") or {}).get("intensity", 0.0) or 0.0),
+    )
 
-    # Add or reinforce tension when pressure is high
-    if affective_pressure > 0.5 and dominant_desire:
-        existing = next(
-            (t for t in unresolved if t.get("theme") == dominant_desire), None
-        )
-        if existing:
-            existing["intensity"] = min(1.0, existing["intensity"] + 0.08)
-            existing["last_reinforced_at"] = now
-        else:
-            unresolved.append({
-                "theme": dominant_desire,
-                "intensity": affective_pressure,
-                "source": user_message[:100],
-                "created_at": now,
-                "last_reinforced_at": now,
-            })
+    if event_flags.get("repair_attempt") or event_flags.get("reassurance_received"):
+        if summary:
+            summary = summary[1:]
 
-    # Passive decay every turn; stronger decay when repair signals land.
-    for tension in unresolved:
-        decay = 0.02
-        if event_flags.get("reassurance_received"):
-            decay += 0.06
-        if event_flags.get("repair_attempt"):
-            decay += 0.07
-        if affective_pressure > 0.5 and tension.get("theme") == dominant_desire:
-            decay = max(0.0, decay - 0.02)
-        tension["intensity"] = max(0.0, tension["intensity"] - decay)
+    if intensity >= 0.5 and (tension_target or dominant_want or residue):
+        label = " / ".join(part for part in (event_type, tension_target, dominant_want or residue) if part)
+        if label and label not in summary:
+            summary.insert(0, label)
 
-    # Prune resolved tensions
-    unresolved = [t for t in unresolved if t["intensity"] > 0.05]
-    unresolved.sort(key=lambda item: item.get("intensity", 0.0), reverse=True)
-
-    return unresolved
+    return summary[:4]
 
 
 def update_mood(
@@ -138,13 +132,11 @@ def update_mood(
     mood = dict(mood)
     mood["turns_since_shift"] = mood.get("turns_since_shift", 0) + 1
 
-    # Natural decay toward calm
     if mood["turns_since_shift"] >= decay_turns:
         for key in ("irritation", "longing", "protectiveness", "fatigue"):
             if key in mood and isinstance(mood[key], (int, float)):
                 mood[key] = max(0.0, mood[key] - 0.1)
 
-    # Event-driven mood shifts (priority order)
     if event_flags.get("jealousy_trigger") or event_flags.get("user_praised_third_party"):
         mood["base_mood"] = "irritated"
         mood["irritation"] = min(1.0, mood.get("irritation", 0.0) + 0.2)
@@ -168,39 +160,47 @@ def generate_memory_candidates(
     user_message: str,
     final_response: str,
     event_flags: dict[str, bool],
-    dynamics: dict[str, Any],
+    appraisal: dict[str, Any],
+    conflict_state: dict[str, Any],
     session_id: str = "",
     turn_number: int = 0,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Generate memory candidates to persist (emotional memories, preferences).
-
-    Returns dict with keys: emotional_memories, semantic_preferences.
-    """
+    """Generate memory candidates to persist."""
     candidates: dict[str, list[dict[str, Any]]] = {
         "emotional_memories": [],
         "semantic_preferences": [],
     }
     now = datetime.now().isoformat()
-    affective = dynamics.get("affective_pressure", 0.0)
-    dominant = dynamics.get("dominant_desire", "")
+    id_impulse = conflict_state.get("id_impulse", {}) or {}
+    residue = conflict_state.get("residue", {}) or {}
+    ego_move = conflict_state.get("ego_move", {}) or {}
+    dominant_want = str(id_impulse.get("dominant_want") or "")
+    intensity = max(
+        float(id_impulse.get("intensity", 0.0) or 0.0),
+        float(residue.get("intensity", 0.0) or 0.0),
+        float((conflict_state.get("superego_pressure", {}) or {}).get("pressure", 0.0) or 0.0),
+    )
+    event_type = str(appraisal.get("event_type") or "")
+    tension_target = str(appraisal.get("target_of_tension") or "")
 
-    # Emotional memory: save if affective pressure is notable
-    if affective > 0.4 and dominant:
+    if intensity > 0.4 and (dominant_want or event_type):
         candidates["emotional_memories"].append({
             "event": user_message[:300],
             "agent_response": final_response[:300],
-            "emotion": _map_desire_to_emotion(dominant),
-            "trigger": dominant,
-            "wound": _infer_wound_from_desire(dominant),
-            "action_tendency": _infer_action_tendency(dominant),
-            "interaction_outcome": _infer_interaction_outcome(event_flags),
-            "intensity": affective,
+            "emotion": _map_desire_to_emotion(dominant_want or residue.get("visible_emotion", "")),
+            "trigger": event_type or dominant_want,
+            "target": id_impulse.get("target", ""),
+            "wound": tension_target,
+            "attempted_action": ego_move.get("social_move", ""),
+            "action_tendency": ego_move.get("social_move", ""),
+            "interaction_outcome": _infer_interaction_outcome(event_flags, event_type),
+            "residual_drive": dominant_want,
+            "intensity": intensity,
             "session_id": session_id,
             "turn_number": turn_number,
             "created_at": now,
         })
 
-    # Semantic preference: save on affectionate exchange
     if event_flags.get("affectionate_exchange") and user_message:
         candidates["semantic_preferences"].append({
             "topic": "affectionate_context",
@@ -215,67 +215,185 @@ def generate_memory_candidates(
 
 
 def run_full_update(
-    relationship: dict[str, Any],
+    relationship_state: dict[str, Any],
     mood: dict[str, Any],
     event_flags: dict[str, bool],
-    dynamics: dict[str, Any],
+    appraisal: dict[str, Any],
+    conflict_state: dict[str, Any],
     request: dict[str, Any],
     response: dict[str, Any],
     rules: dict[str, dict[str, float]] | None = None,
     decay_turns: int = 3,
     session_id: str = "",
     turn_number: int = 0,
+    memory_candidates_override: dict[str, list[dict[str, Any]]] | None = None,
+    unresolved_tension_summary_override: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Run the complete state update pipeline.
-
-    Returns a dict with keys:
-        relationship, mood, unresolved_tensions, memory_candidates,
-        applied_rules, trace
-    """
+    """Run the complete relationship persistence update pipeline."""
     user_message = request.get("user_message", "")
     final_response_text = response.get("final_response_text", "")
 
-    # 1. Relationship rules
-    updated_rel, applied = apply_relationship_rules(relationship, event_flags, rules)
-
-    # 2. Unresolved tensions
-    unresolved = update_unresolved_tensions(
-        unresolved=updated_rel.get("unresolved_tensions", []),
-        dominant_desire=dynamics.get("dominant_desire", ""),
-        affective_pressure=dynamics.get("affective_pressure", 0.0),
-        user_message=user_message,
+    updated_state, applied = apply_relationship_updates(relationship_state, event_flags, rules)
+    updated_state = update_relationship_state(
+        relationship_state=updated_state,
+        appraisal=appraisal,
+        conflict_state=conflict_state,
         event_flags=event_flags,
     )
-    updated_rel["unresolved_tensions"] = unresolved
+    if unresolved_tension_summary_override is None:
+        updated_state["durable"]["unresolved_tension_summary"] = update_unresolved_tension_summary(
+            unresolved_summary=updated_state["durable"].get("unresolved_tension_summary", []) or [],
+            appraisal=appraisal,
+            conflict_state=conflict_state,
+            event_flags=event_flags,
+        )
+    else:
+        updated_state["durable"]["unresolved_tension_summary"] = [
+            str(item) for item in unresolved_tension_summary_override if item
+        ][:4]
 
-    # 3. Mood
     updated_mood = update_mood(mood, event_flags, decay_turns)
 
-    # 4. Memory candidates
-    memory_candidates = generate_memory_candidates(
-        user_message=user_message,
-        final_response=final_response_text,
-        event_flags=event_flags,
-        dynamics=dynamics,
-        session_id=session_id,
-        turn_number=turn_number,
-    )
+    if memory_candidates_override is None:
+        memory_candidates = generate_memory_candidates(
+            user_message=user_message,
+            final_response=final_response_text,
+            event_flags=event_flags,
+            appraisal=appraisal,
+            conflict_state=conflict_state,
+            session_id=session_id,
+            turn_number=turn_number,
+        )
+    else:
+        memory_candidates = {
+            "emotional_memories": [
+                dict(item) for item in memory_candidates_override.get("emotional_memories", [])
+            ],
+            "semantic_preferences": [
+                dict(item) for item in memory_candidates_override.get("semantic_preferences", [])
+            ],
+        }
 
     trace = {
         "applied_rules": applied,
         "event_flags": event_flags,
-        "unresolved_tensions_count": len(unresolved),
+        "relationship_stage": updated_state["durable"].get("relationship_stage", "unfamiliar"),
         "memory_candidates_count": sum(len(v) for v in memory_candidates.values()),
     }
 
     return {
-        "relationship": updated_rel,
+        "relationship_state": updated_state,
         "mood": updated_mood,
-        "unresolved_tensions": unresolved,
         "memory_candidates": memory_candidates,
         "applied_rules": applied,
         "trace": trace,
     }
+
+
+def update_relationship_state(
+    *,
+    relationship_state: dict[str, Any],
+    appraisal: dict[str, Any],
+    conflict_state: dict[str, Any],
+    event_flags: dict[str, bool],
+) -> dict[str, Any]:
+    """Update durable and ephemeral relationship state from appraisal/conflict outcomes."""
+    durable = dict(relationship_state.get("durable", {}) or {})
+    ephemeral = dict(relationship_state.get("ephemeral", {}) or {})
+    event_type = str(appraisal.get("event_type") or "")
+    target_of_tension = str(appraisal.get("target_of_tension") or "")
+    ego_move = str((conflict_state.get("ego_move") or {}).get("social_move") or "")
+    id_intensity = float((conflict_state.get("id_impulse") or {}).get("intensity", 0.0) or 0.0)
+    residue_intensity = float((conflict_state.get("residue") or {}).get("intensity", 0.0) or 0.0)
+
+    if event_type in {"exclusive_disclosure", "affection_signal"}:
+        durable["intimacy"] = _clamp(float(durable.get("intimacy", 0.0) or 0.0) + 0.04)
+        durable["trust"] = _clamp(float(durable.get("trust", 0.0) or 0.0) + 0.02)
+        ephemeral["recent_relational_charge"] = _clamp(
+            float(ephemeral.get("recent_relational_charge", 0.0) or 0.0) + 0.12
+        )
+    elif event_type == "repair_offer":
+        durable["repair_depth"] = _clamp(float(durable.get("repair_depth", 0.0) or 0.0) + 0.10)
+        durable["trust"] = _clamp(float(durable.get("trust", 0.0) or 0.0) + 0.03)
+        ephemeral["turn_local_repair_opening"] = _clamp(
+            float(ephemeral.get("turn_local_repair_opening", 0.0) or 0.0) + 0.20
+        )
+    elif event_type == "distancing":
+        durable["distance"] = _clamp(float(durable.get("distance", 0.0) or 0.0) + 0.06)
+        durable["commitment_readiness"] = _clamp(
+            float(durable.get("commitment_readiness", 0.0) or 0.0) - 0.05
+        )
+        ephemeral["interaction_fragility"] = _clamp(
+            float(ephemeral.get("interaction_fragility", 0.0) or 0.0) + 0.10
+        )
+    elif event_type == "commitment_request":
+        ephemeral["recent_relational_charge"] = _clamp(
+            float(ephemeral.get("recent_relational_charge", 0.0) or 0.0) + 0.10
+        )
+        if ego_move in {"accept_but_hold", "receive_without_chasing", "allow_dependence_but_reframe"}:
+            durable["commitment_readiness"] = _clamp(
+                float(durable.get("commitment_readiness", 0.0) or 0.0) + 0.05
+            )
+        else:
+            ephemeral["interaction_fragility"] = _clamp(
+                float(ephemeral.get("interaction_fragility", 0.0) or 0.0) + 0.06
+            )
+
+    if target_of_tension in {"jealousy", "pride", "shame", "status"}:
+        ephemeral["tension"] = _clamp(float(ephemeral.get("tension", 0.0) or 0.0) + 0.04)
+        ephemeral["recent_relational_charge"] = _clamp(
+            float(ephemeral.get("recent_relational_charge", 0.0) or 0.0) + 0.04
+        )
+
+    if ego_move in {"accept_but_hold", "receive_without_chasing"}:
+        durable["trust"] = _clamp(float(durable.get("trust", 0.0) or 0.0) + 0.01)
+        durable["distance"] = _clamp(float(durable.get("distance", 0.0) or 0.0) - 0.01)
+    elif ego_move in {"acknowledge_without_opening", "withdraw"}:
+        durable["distance"] = _clamp(float(durable.get("distance", 0.0) or 0.0) + 0.02)
+        ephemeral["interaction_fragility"] = _clamp(
+            float(ephemeral.get("interaction_fragility", 0.0) or 0.0) + 0.04
+        )
+
+    if event_flags.get("repair_attempt") or event_flags.get("reassurance_received"):
+        durable["commitment_readiness"] = _clamp(
+            float(durable.get("commitment_readiness", 0.0) or 0.0) + 0.03
+        )
+
+    ephemeral["recent_relational_charge"] = _clamp(
+        float(ephemeral.get("recent_relational_charge", 0.0) or 0.0)
+        + (id_intensity * 0.05)
+        + (residue_intensity * 0.04)
+    )
+
+    stage_score = (
+        float(durable.get("trust", 0.0) or 0.0) * 0.32
+        + float(durable.get("intimacy", 0.0) or 0.0) * 0.24
+        + float(durable.get("commitment_readiness", 0.0) or 0.0) * 0.18
+        + float(durable.get("repair_depth", 0.0) or 0.0) * 0.10
+        + float(durable.get("attachment_pull", 0.0) or 0.0) * 0.10
+        - float(durable.get("distance", 0.0) or 0.0) * 0.08
+        - float(ephemeral.get("tension", 0.0) or 0.0) * 0.12
+        - float(ephemeral.get("interaction_fragility", 0.0) or 0.0) * 0.08
+    )
+    if stage_score < 0.28:
+        durable["relationship_stage"] = "unfamiliar"
+    elif stage_score < 0.48:
+        durable["relationship_stage"] = "warming"
+    elif stage_score < 0.64:
+        durable["relationship_stage"] = "charged"
+    elif stage_score < 0.80:
+        durable["relationship_stage"] = "testing"
+    else:
+        durable["relationship_stage"] = "mutual"
+
+    ephemeral["escalation_allowed"] = (
+        float(durable.get("commitment_readiness", 0.0) or 0.0) >= 0.65
+        and float(durable.get("repair_depth", 0.0) or 0.0) >= 0.30
+        and durable.get("relationship_stage") in {"testing", "mutual"}
+        and float(ephemeral.get("interaction_fragility", 0.0) or 0.0) < 0.45
+    )
+
+    return {"durable": durable, "ephemeral": ephemeral}
 
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 1.0) -> float:
@@ -293,35 +411,17 @@ def _relationship_tension_settle(event_flags: dict[str, bool]) -> float:
     return settle
 
 
-def _infer_wound_from_desire(dominant_desire: str) -> str:
-    wound_by_desire = {
-        "jealousy": "special_to_user",
-        "fear_of_replacement": "replaceable",
-        "fear_of_rejection": "unwanted",
-        "need_for_reassurance": "uncertain_bond",
-        "shame_after_exposure": "loss_of_face",
-    }
-    return wound_by_desire.get(dominant_desire, dominant_desire)
+def _map_desire_to_emotion(desire: str) -> str:
+    return _DESIRE_TO_EMOTION.get(desire, desire or "mixed_affect")
 
 
-def _infer_action_tendency(dominant_desire: str) -> str:
-    tendency_by_desire = {
-        "jealousy": "test_user",
-        "fear_of_replacement": "pull_closer",
-        "fear_of_rejection": "withdraw",
-        "need_for_reassurance": "seek_repair",
-        "shame_after_exposure": "conceal",
-    }
-    return tendency_by_desire.get(dominant_desire, "monitor")
-
-
-def _infer_interaction_outcome(event_flags: dict[str, bool]) -> str:
-    if event_flags.get("repair_attempt") or event_flags.get("reassurance_received"):
+def _infer_interaction_outcome(event_flags: dict[str, bool], event_type: str) -> str:
+    if event_flags.get("repair_attempt") or event_flags.get("reassurance_received") or event_type == "repair_offer":
         return "repair_signal"
     if event_flags.get("jealousy_trigger") or event_flags.get("user_praised_third_party"):
         return "tension_increase"
-    if event_flags.get("rejection_signal") or event_flags.get("prolonged_avoidance"):
+    if event_flags.get("rejection_signal") or event_flags.get("prolonged_avoidance") or event_type == "distancing":
         return "distance_increase"
-    if event_flags.get("affectionate_exchange"):
+    if event_flags.get("affectionate_exchange") or event_type in {"affection_signal", "exclusive_disclosure"}:
         return "bonding"
     return "neutral"

@@ -1,13 +1,13 @@
 llm:
   provider: openai
-  model: gpt-5.4-2026-03-05
+  model: gpt-5.4-mini
 
 runtime:
-  max_iterations: 1
+  max_iterations: 16
   supervisor: main
 
 personas:
-  default: cold_attached_idol
+  default: irresistibly_sweet_center_heroine
   directory: configs/personas
 
 vault:

@@ -141,7 +141,45 @@ questions:
       3: "やや説明的だった"
       5: "説明しすぎず、発話として自然だった"
 
-  - id: q11_free_comment
+  - id: q11_roughness
+    category: quality
+    question_ja: "少し雑味や揺れがあり、人っぽかったか"
+    question_en: "Did the response contain a bit of roughness or wavering that felt human?"
+    description: >
+      きれいに整いすぎず、言いよどみ、温度差、少しの照れや引き下がりなどが
+      適度に混じっていたかを評価する。
+    scale: likert_5
+    anchors:
+      1: "整いすぎていて作り物っぽかった"
+      3: "部分的に揺れや雑味があった"
+      5: "雑味や揺れが自然で人間味につながっていた"
+
+  - id: q12_pacing
+    category: quality
+    question_ja: "関係の進み方・引き止め方の速度は自然だったか"
+    question_en: "Did the pace of relational advance or hesitation feel natural?"
+    description: >
+      告白、受容、保留、引き止めなどの速度が、その会話量や関係段階に対して
+      妥当だったかを評価する。
+    scale: likert_5
+    anchors:
+      1: "進展や承認が早すぎる / 不自然に遅すぎた"
+      3: "概ね自然だが少し違和感があった"
+      5: "関係段階に対してとても自然だった"
+
+  - id: q13_surface_variation
+    category: quality
+    question_ja: "定型の言い回しや決め台詞の反復が少なかったか"
+    question_en: "Did the response avoid repetitive catchphrases or formulaic openings?"
+    description: >
+      会話全体で opener や決め台詞が固定化せず、その場で反応している感じがあったか。
+    scale: likert_5
+    anchors:
+      1: "定型句の反復が目立った"
+      3: "少し反復があった"
+      5: "反復が少なく、その場の反応として新鮮だった"
+
+  - id: q14_free_comment
     category: open
     question_ja: "自由記述"
     question_en: "Free comment"

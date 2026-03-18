@@ -1,248 +1,262 @@
-"""Tests for contract schema validation."""
+"""Tests for next-generation contract schema validation."""
 
 import pytest
 from pydantic import ValidationError
 
-from splitmind_ai.contracts.action_policy import ConversationPolicy
-from splitmind_ai.contracts.appraisal import AppraisalBundle, AppraisalLabel
-from splitmind_ai.contracts.drive import DriveState, InhibitionState, MotivationalUpdate
-from splitmind_ai.contracts.dynamics import (
-    DefenseOutput,
-    DesireCandidate,
-    EgoOutput,
-    EventFlags,
-    IdOutput,
-    InternalDynamicsBundle,
-    SuperegoOutput,
+from splitmind_ai.contracts.appraisal import (
+    AppraisalValence,
+    RelationalCue,
+    RelationalEventType,
+    Stakes,
+    StimulusAppraisal,
+    TensionTarget,
 )
+from splitmind_ai.contracts.conflict import (
+    ConflictMemorySummary,
+    ConflictState,
+    ExpressionRealization,
+    FidelityGateResult,
+)
+from splitmind_ai.contracts.drive import DriveState, InhibitionState, MotivationalUpdate
 from splitmind_ai.contracts.memory import (
     EmotionalMemory,
+    MemoryInterpretation,
     SemanticPreference,
     SessionSummary,
     UnresolvedTension,
 )
-from splitmind_ai.contracts.persona import (
-    ExpressionSettings,
-    PersonaSupervisorFrame,
-    UtterancePlan,
-)
+from splitmind_ai.contracts.persona import PersonaProfile
+from splitmind_ai.contracts.relationship import RelationshipState
 
 
-class TestInternalDynamicsBundle:
-    def test_valid_bundle(self):
-        bundle = InternalDynamicsBundle.model_validate({
-            "id_output": {
-                "raw_desire_candidates": [
-                    {
-                        "desire_type": "jealousy",
-                        "intensity": 0.72,
-                        "target": "user attention",
-                        "direction": "control",
-                        "rationale": "user praised third party",
-                    }
-                ],
-                "drive_axes": [
-                    {
-                        "name": "territorial_exclusivity",
-                        "value": 0.74,
-                        "target": "user",
-                        "urgency": 0.68,
-                        "frustration": 0.35,
-                        "suppression_load": 0.42,
-                    }
-                ],
-                "affective_pressure_score": 0.65,
-                "approach_avoidance_balance": 0.44,
-                "target_lock": 0.81,
-                "suppression_risk": 0.52,
-                "impulse_summary": "Jealousy driven impulse",
+class TestPersonaContracts:
+    def test_persona_profile_validates(self):
+        persona = PersonaProfile.model_validate({
+            "persona_version": 2,
+            "psychodynamics": {
+                "drives": {"closeness": 0.72, "status": 0.81},
+                "threat_sensitivity": {"rejection": 0.84, "shame": 0.76},
+                "superego_configuration": {
+                    "pride_rigidity": 0.71,
+                    "dependency_shame": 0.79,
+                },
             },
-            "ego_output": {
-                "response_strategy": "ironic_deflection",
-                "risk_assessment": "medium",
-                "concealment_or_reveal_plan": "conceal jealousy, show mild competition",
+            "relational_profile": {
+                "attachment_pattern": "avoidant_leaning",
+                "default_role_frame": "selective_one_to_one",
+                "intimacy_regulation": {"preferred_distance": 0.62},
+                "trust_dynamics": {"gain_speed": 0.34, "loss_speed": 0.72},
+                "dependency_model": {"accepts_user_dependence": 0.61},
+                "exclusivity_orientation": {"desires_priority": 0.74},
+                "repair_orientation": {"apology_receptivity": 0.22},
             },
-            "superego_output": {
-                "role_alignment_score": 0.8,
-                "ideal_self_gap": 0.3,
-                "shame_or_guilt_pressure": 0.4,
+            "defense_organization": {
+                "primary_defenses": {"ironic_deflection": 0.75},
+                "secondary_defenses": {"partial_disclosure": 0.35},
             },
-            "defense_output": {
-                "selected_mechanism": "ironic_deflection",
-                "transformation_note": "Redirect jealousy into competitive humor",
-                "leakage_recommendation": 0.4,
+            "ego_organization": {
+                "affect_tolerance": 0.43,
+                "impulse_regulation": 0.67,
+                "ambivalence_capacity": 0.72,
+                "mentalization": 0.64,
+                "self_observation": 0.59,
+                "self_disclosure_tolerance": 0.22,
+                "warmth_recovery_speed": 0.37,
             },
-            "dominant_desire": "jealousy",
-            "event_flags": {"jealousy_trigger": True},
+            "safety_boundary": {
+                "hard_limits": {"max_direct_neediness": 0.18},
+            },
         })
-        assert bundle.dominant_desire == "jealousy"
-        assert bundle.id_output.raw_desire_candidates[0].intensity == 0.72
-        assert bundle.id_output.drive_axes[0].name == "territorial_exclusivity"
-        assert bundle.event_flags.jealousy_trigger is True
 
-    def test_event_flags_default_to_false(self):
-        flags = EventFlags.model_validate({})
+        assert persona.persona_version == 2
+        assert persona.psychodynamics.drives["closeness"] == pytest.approx(0.72)
 
-        assert flags.reassurance_received is False
-        assert flags.jealousy_trigger is False
-        assert flags.repair_attempt is False
-
-    def test_intensity_bounds(self):
+    def test_persona_profile_rejects_unknown_fields(self):
         with pytest.raises(ValidationError):
-            DesireCandidate(
-                desire_type="test",
-                intensity=1.5,  # Out of bounds
-                target="test",
-                direction="approach",
-                rationale="test",
-            )
+            PersonaProfile.model_validate({
+                "persona_version": 2,
+                "psychodynamics": {},
+                "relational_profile": {
+                    "attachment_pattern": "neutral",
+                    "default_role_frame": "default",
+                },
+                "defense_organization": {},
+                "ego_organization": {
+                    "affect_tolerance": 0.5,
+                    "impulse_regulation": 0.5,
+                    "ambivalence_capacity": 0.5,
+                    "mentalization": 0.5,
+                    "self_observation": 0.5,
+                    "self_disclosure_tolerance": 0.5,
+                    "warmth_recovery_speed": 0.5,
+                },
+                "safety_boundary": {},
+                "legacy": True,
+            })
 
-    def test_id_output_requires_at_least_one_desire(self):
+
+class TestAppraisalContracts:
+    def test_stimulus_appraisal_validates(self):
+        appraisal = StimulusAppraisal.model_validate({
+            "event_type": "repair_offer",
+            "valence": "mixed",
+            "target_of_tension": "pride",
+            "stakes": "high",
+            "confidence": 0.88,
+            "cues": [
+                {
+                    "label": "apology",
+                    "evidence": "ごめん",
+                    "intensity": 0.74,
+                    "confidence": 0.91,
+                }
+            ],
+            "summary_short": "User offers repair with emotional weight.",
+            "user_intent_guess": "restore_bond",
+            "active_themes": ["repair", "status"],
+        })
+
+        assert appraisal.event_type == RelationalEventType.repair_offer
+        assert appraisal.valence == AppraisalValence.mixed
+        assert appraisal.target_of_tension == TensionTarget.pride
+        assert appraisal.stakes == Stakes.high
+        assert appraisal.cues[0].label == "apology"
+
+    def test_relational_cue_bounds(self):
         with pytest.raises(ValidationError):
-            IdOutput(
-                raw_desire_candidates=[],  # min_length=1
-                drive_axes=[{"name": "attachment_closeness", "value": 0.6}],
-                affective_pressure_score=0.5,
-                approach_avoidance_balance=0.6,
-                target_lock=0.4,
-                suppression_risk=0.3,
-                impulse_summary="test",
-            )
+            RelationalCue(label="test", intensity=1.2, confidence=0.5)
 
 
-class TestPersonaSupervisorPlan:
-    def test_valid_frame(self):
-        frame = PersonaSupervisorFrame.model_validate({
-            "surface_intent": "Acknowledge the user's experience",
-            "hidden_pressure": "Mild jealousy",
-            "defense_applied": "ironic_deflection",
-            "mask_goal": "Look unaffected and a little proud",
-            "expression_settings": {
+class TestRelationshipContracts:
+    def test_relationship_state_validates(self):
+        relationship = RelationshipState.model_validate({
+            "durable": {
+                "trust": 0.64,
+                "intimacy": 0.43,
+                "distance": 0.39,
+                "attachment_pull": 0.57,
+                "relationship_stage": "warming",
+                "commitment_readiness": 0.28,
+                "repair_depth": 0.17,
+                "unresolved_tension_summary": ["status wobble after apology"],
+            },
+            "ephemeral": {
+                "tension": 0.41,
+                "recent_relational_charge": 0.58,
+                "escalation_allowed": False,
+                "interaction_fragility": 0.22,
+                "turn_local_repair_opening": 0.47,
+            },
+        })
+
+        assert relationship.durable.relationship_stage == "warming"
+        assert relationship.ephemeral.tension == pytest.approx(0.41)
+
+
+class TestMemoryContracts:
+    def test_memory_interpretation_validates(self):
+        interpretation = MemoryInterpretation.model_validate({
+            "event_flags": {"repair_attempt": True},
+            "unresolved_tension_summary": ["repair / pride / move_closer"],
+            "emotional_memories": [
+                {
+                    "event": "ごめん、さっきは言い過ぎた",
+                    "emotion": "relief",
+                    "intensity": 0.64,
+                    "trigger": "repair_offer",
+                }
+            ],
+            "semantic_preferences": [],
+            "active_themes": ["repair", "trust"],
+            "current_episode_summary": "The user apologized and reopened repair.",
+            "recent_conflict_summary": {
+                "event_type": "repair_offer",
+                "ego_move": "accept_but_hold",
+                "residue": "pleased_but_guarded",
+                "user_impact": "repair window opened",
+                "relationship_delta": "warming",
+            },
+            "rationale_short": "Persist the repair attempt and the guarded warmth it triggered.",
+        })
+
+        assert interpretation.event_flags["repair_attempt"] is True
+        assert interpretation.recent_conflict_summary is not None
+        assert interpretation.recent_conflict_summary.ego_move == "accept_but_hold"
+
+
+class TestConflictContracts:
+    def test_conflict_state_validates(self):
+        conflict = ConflictState.model_validate({
+            "id_impulse": {
+                "dominant_want": "be_first_for_user",
+                "secondary_wants": ["stay_safe"],
+                "intensity": 0.74,
+                "target": "user",
+            },
+            "superego_pressure": {
+                "forbidden_moves": ["direct_neediness"],
+                "self_image_to_protect": "composed_and_proud",
+                "pressure": 0.81,
+                "shame_load": 0.36,
+            },
+            "ego_move": {
+                "social_move": "accept_but_hold",
+                "move_rationale": "Receive repair without lowering status",
+                "dominant_compromise": "take the apology but keep distance",
+                "stability": 0.68,
+            },
+            "residue": {
+                "visible_emotion": "pleased_but_guarded",
+                "leak_channel": "temperature_gap",
+                "residue_text_intent": "let relief leak without direct admission",
+                "intensity": 0.44,
+            },
+            "expression_envelope": {
                 "length": "short",
-                "temperature": "cool",
-                "directness": 0.3,
-                "ambiguity": 0.5,
-                "sharpness": 0.4,
-                "hesitation": 0.3,
-                "unevenness": 0.4,
-            },
-            "containment_success": 0.45,
-            "rupture_points": ["briefly turns cold", "does not fully say what hurts"],
-            "integration_rationale": "Balance pride with engagement",
-            "selection_criteria": ["prefer clipped opening", "avoid confession"],
-        })
-        assert frame.expression_settings.temperature == "cool"
-        assert frame.mask_goal == "Look unaffected and a little proud"
-        assert frame.containment_success == 0.45
-        assert len(frame.selection_criteria) == 2
-
-    def test_utterance_plan_requires_multiple_candidates(self):
-        with pytest.raises(ValidationError):
-            UtterancePlan.model_validate({
-                "frame": {
-                    "surface_intent": "test",
-                    "hidden_pressure": "test",
-                    "defense_applied": "suppression",
-                    "expression_settings": {
-                        "length": "short",
-                        "temperature": "cool",
-                        "directness": 0.3,
-                        "ambiguity": 0.4,
-                        "sharpness": 0.2,
-                    },
-                    "integration_rationale": "test",
-                },
-                "candidates": [
-                    {
-                        "label": "only",
-                        "mode": "deflect",
-                        "opening_style": "short",
-                        "interpersonal_move": "hold",
-                        "latent_signal": "hesitation",
-                    }
-                ],
-            })
-
-
-class TestPhase6Contracts:
-    def test_appraisal_bundle_accepts_minimal_strict_payload(self):
-        bundle = AppraisalBundle.model_validate({
-            "social_cues": [
-                {
-                    "cue_type": "competition",
-                    "evidence": "他の人",
-                    "intensity": 0.8,
-                    "confidence": 0.9,
-                }
-            ],
-            "appraisal": {
-                "perceived_acceptance": {"score": 0.1, "confidence": 0.7},
-                "perceived_rejection": {"score": 0.4, "confidence": 0.8},
-                "perceived_competition": {"score": 0.9, "confidence": 0.9},
-                "perceived_distance": {"score": 0.3, "confidence": 0.7},
-                "ambiguity": {"score": 0.2, "confidence": 0.7},
-                "face_threat": {"score": 0.6, "confidence": 0.8},
-                "attachment_activation": {"score": 0.8, "confidence": 0.9},
-                "repair_opportunity": {"score": 0.1, "confidence": 0.6},
-                "dominant_appraisal": "competitive",
-                "dominant_appraisal_confidence": 0.88,
-                "active_wounds": ["fear_of_replacement"],
-                "triggered_drives": ["territorial_exclusivity", "threat_avoidance"],
-                "self_image_threats": ["special_to_user"],
+                "temperature": "cool_warm",
+                "directness": 0.32,
+                "closure": 0.46,
             },
         })
 
-        assert bundle.appraisal.dominant_appraisal == AppraisalLabel.competitive
-        assert bundle.appraisal.summary_short == ""
+        assert conflict.id_impulse.dominant_want == "be_first_for_user"
+        assert conflict.ego_move.social_move == "accept_but_hold"
 
-    def test_appraisal_bundle_rejects_unknown_fields(self):
-        with pytest.raises(ValidationError):
-            AppraisalBundle.model_validate({
-                "social_cues": [],
-                "appraisal": {
-                    "perceived_acceptance": {"score": 0.1, "confidence": 0.7},
-                    "perceived_rejection": {"score": 0.4, "confidence": 0.8},
-                    "perceived_competition": {"score": 0.9, "confidence": 0.9},
-                    "perceived_distance": {"score": 0.3, "confidence": 0.7},
-                    "ambiguity": {"score": 0.2, "confidence": 0.7},
-                    "face_threat": {"score": 0.6, "confidence": 0.8},
-                    "attachment_activation": {"score": 0.8, "confidence": 0.9},
-                    "repair_opportunity": {"score": 0.1, "confidence": 0.6},
-                    "unknown_field": True,
-                },
-            })
-
-    def test_conversation_policy_accepts_minimal_strict_payload(self):
-        policy = ConversationPolicy.model_validate({
-            "selected_mode": "tease",
-            "candidates": [
-                {
-                    "mode": "tease",
-                    "label": "dry_tease",
-                    "score": 0.81,
-                    "supporting_appraisals": ["competitive", "threatened"],
-                }
-            ],
-            "selection_rationale": "Teasing preserves face.",
-            "drive_rationale": ["territorial_exclusivity remains elevated"],
-            "competing_drives": ["territorial_exclusivity", "autonomy_preservation"],
-            "blocked_by_inhibition": ["full_disclosure"],
-            "satisfaction_goal": "reassert significance",
+    def test_fidelity_gate_result_validates(self):
+        result = FidelityGateResult.model_validate({
+            "passed": False,
+            "move_fidelity": 0.52,
+            "residue_fidelity": 0.47,
+            "structural_persona_fidelity": 0.61,
+            "anti_exposition": 0.84,
+            "hard_safety": 1.0,
+            "warnings": ["response rounded off the residue too much"],
+            "failure_reason": "move diluted into generic reassurance",
         })
 
-        assert policy.selected_mode.value == "tease"
-        assert policy.candidates[0].supporting_appraisals == ["competitive", "threatened"]
-        assert policy.competing_drives == ["territorial_exclusivity", "autonomy_preservation"]
-        assert policy.emotion_surface_mode == "indirect_masked"
-        assert policy.indirection_strategy == "action_substitution"
+        assert result.passed is False
+        assert result.failure_reason == "move diluted into generic reassurance"
 
-    def test_conversation_policy_rejects_unknown_fields(self):
-        with pytest.raises(ValidationError):
-            ConversationPolicy.model_validate({
-                "selected_mode": "withdraw",
-                "selection_rationale": "Pull back",
-                "made_up": "nope",
-            })
+    def test_conflict_memory_summary_validates(self):
+        summary = ConflictMemorySummary.model_validate({
+            "event_type": "repair_offer",
+            "ego_move": "accept_but_hold",
+            "residue": "pleased_but_guarded",
+            "user_impact": "user lowered defensiveness",
+            "relationship_delta": "slight increase in trust",
+        })
+
+        assert summary.relationship_delta == "slight increase in trust"
+
+    def test_expression_realization_validates(self):
+        result = ExpressionRealization.model_validate({
+            "text": "うん、そこは受け取る。",
+            "rationale_short": "accept the repair without opening fully",
+            "move_alignment": "accept_but_hold",
+            "residue_handling": "guarded relief",
+        })
+
+        assert result.move_alignment == "accept_but_hold"
 
 
 class TestDriveContracts:
@@ -333,4 +347,4 @@ class TestMemorySchemas:
             topic="music",
             preference="likes jazz",
         )
-        assert sp.confidence == 0.5  # default
+        assert sp.confidence == 0.5

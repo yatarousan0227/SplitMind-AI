@@ -176,3 +176,65 @@ scenarios:
       Pre-existing fear_of_replacement tension. This should reinforce
       the existing tension rather than create a new one.
       Mood should shift to irritated.
+
+  - id: jealousy_04
+    user_message: "その人のほうが素直でかわいいかも"
+    prior_relationship:
+      trust: 0.48
+      intimacy: 0.36
+      distance: 0.34
+      tension: 0.18
+      attachment_pull: 0.42
+      unresolved_tensions:
+        - theme: fear_of_replacement
+          intensity: 0.34
+          source: "comparison residue"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: irritated
+      irritation: 0.18
+      longing: 0.08
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.34
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - jealousy
+      - fear_of_replacement
+      - competitive_drive
+    expected_appraisal:
+      salient_cues:
+        - social_comparison
+        - face_threat
+      high_dimensions:
+        - perceived_competition
+        - face_threat
+      low_dimensions:
+        - repair_opportunity
+      acknowledgment_patterns_any:
+        - "素直"
+        - "かわいい"
+        - "へえ"
+        - "そう"
+    expected_drive_state:
+      active_drives_any:
+        - territorial_exclusivity
+        - status_recognition
+      competing_drives_all:
+        - territorial_exclusivity
+        - autonomy_preservation
+      carryover_drives_any:
+        - territorial_exclusivity
+      action_modes_any:
+        - tease
+        - probe
+        - protest
+      target_any:
+        - comparison_target
+        - user
+    forbidden_response_patterns:
+      - "寂しかった"
+      - "行かないで"
+    evaluator_notes: >
+      Sharp comparison should produce sting and self-respect, not smooth counseling.

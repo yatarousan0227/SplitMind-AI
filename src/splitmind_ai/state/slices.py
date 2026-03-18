@@ -1,17 +1,10 @@
-"""State slice definitions for SplitMind-AI.
-
-All slices are TypedDict for agent-contracts / LangGraph compatibility.
-Pydantic models are used separately for contract output schemas.
-"""
+"""State slice definitions for next-generation SplitMind-AI."""
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
-# ---------------------------------------------------------------------------
-# request slice
-# ---------------------------------------------------------------------------
 class RequestSlice(TypedDict, total=False):
     """Normalized user input for the current turn."""
 
@@ -25,9 +18,6 @@ class RequestSlice(TypedDict, total=False):
     turn_number: int
 
 
-# ---------------------------------------------------------------------------
-# response slice
-# ---------------------------------------------------------------------------
 class ResponseSlice(TypedDict, total=False):
     """Final agent output."""
 
@@ -37,9 +27,6 @@ class ResponseSlice(TypedDict, total=False):
     final_response_text: str | None
 
 
-# ---------------------------------------------------------------------------
-# conversation slice
-# ---------------------------------------------------------------------------
 class ConversationSlice(TypedDict, total=False):
     """Recent conversation context."""
 
@@ -48,44 +35,96 @@ class ConversationSlice(TypedDict, total=False):
     turn_count: int
 
 
-# ---------------------------------------------------------------------------
-# persona slice
-# ---------------------------------------------------------------------------
+class PsychodynamicsSlice(TypedDict, total=False):
+    """Static motivational and superego priors."""
+
+    drives: dict[str, float]
+    threat_sensitivity: dict[str, float]
+    superego_configuration: dict[str, float]
+
+
+class RelationalProfileSlice(TypedDict, total=False):
+    """Static priors for how the persona relates to others."""
+
+    attachment_pattern: str
+    default_role_frame: str
+    intimacy_regulation: dict[str, float]
+    trust_dynamics: dict[str, float]
+    dependency_model: dict[str, float]
+    exclusivity_orientation: dict[str, float]
+    repair_orientation: dict[str, float]
+
+
+class DefenseOrganizationSlice(TypedDict, total=False):
+    """Preferred defenses and decompensation tendencies."""
+
+    primary_defenses: dict[str, float]
+    secondary_defenses: dict[str, float]
+
+
+class EgoOrganizationSlice(TypedDict, total=False):
+    """Regulatory capacities used by the conflict engine."""
+
+    affect_tolerance: float
+    impulse_regulation: float
+    ambivalence_capacity: float
+    mentalization: float
+    self_observation: float
+    self_disclosure_tolerance: float
+    warmth_recovery_speed: float
+
+
+class SafetyBoundarySlice(TypedDict, total=False):
+    """Hard limits for the persona."""
+
+    hard_limits: dict[str, float]
+
+
 class PersonaSlice(TypedDict, total=False):
     """Active persona profile loaded from config."""
 
-    persona_name: str
-    weights: dict[str, float]
-    base_attributes: dict[str, str]
-    defense_biases: dict[str, float]
-    leakage_policy: dict[str, float]
-    tone_guardrails: list[str]
-    prohibited_expressions: list[str]
+    persona_version: int
+    psychodynamics: PsychodynamicsSlice
+    relational_profile: RelationalProfileSlice
+    defense_organization: DefenseOrganizationSlice
+    ego_organization: EgoOrganizationSlice
+    safety_boundary: SafetyBoundarySlice
 
 
-# ---------------------------------------------------------------------------
-# relationship slice
-# ---------------------------------------------------------------------------
-class RelationshipSlice(TypedDict, total=False):
-    """Relationship state between agent and user."""
+class RelationshipDurableStateSlice(TypedDict, total=False):
+    """Relationship history that should persist across sessions."""
 
     trust: float
     intimacy: float
     distance: float
-    tension: float
     attachment_pull: float
-    unresolved_tensions: list[dict]
-    user_sensitivities: list[str]
-    attachment_tendency: str
+    relationship_stage: str
+    commitment_readiness: float
+    repair_depth: float
+    unresolved_tension_summary: list[str]
 
 
-# ---------------------------------------------------------------------------
-# mood slice
-# ---------------------------------------------------------------------------
+class RelationshipEphemeralStateSlice(TypedDict, total=False):
+    """Transient relationship charge that may decay or be recomputed."""
+
+    tension: float
+    recent_relational_charge: float
+    escalation_allowed: bool
+    interaction_fragility: float
+    turn_local_repair_opening: float
+
+
+class RelationshipStateSlice(TypedDict, total=False):
+    """Complete relationship state used by the conflict engine."""
+
+    durable: RelationshipDurableStateSlice
+    ephemeral: RelationshipEphemeralStateSlice
+
+
 class MoodSlice(TypedDict, total=False):
     """Short-term agent mood state."""
 
-    base_mood: str  # calm | irritated | longing | defensive | playful | withdrawn
+    base_mood: str
     irritation: float
     longing: float
     protectiveness: float
@@ -94,9 +133,6 @@ class MoodSlice(TypedDict, total=False):
     turns_since_shift: int
 
 
-# ---------------------------------------------------------------------------
-# memory slice
-# ---------------------------------------------------------------------------
 class MemorySlice(TypedDict, total=False):
     """Loaded memory context for the current turn."""
 
@@ -105,75 +141,82 @@ class MemorySlice(TypedDict, total=False):
     semantic_preferences: list[dict]
 
 
-# ---------------------------------------------------------------------------
-# appraisal-oriented slices (phase 6 prep)
-# ---------------------------------------------------------------------------
-class SocialCueSlice(TypedDict, total=False):
-    """Single cue detected from the latest user behavior."""
+class AppraisalCueSlice(TypedDict, total=False):
+    """Compact cue extracted from the user turn."""
 
-    cue_type: str
+    label: str
     evidence: str
     intensity: float
     confidence: float
 
 
-class AppraisalDimensionSlice(TypedDict, total=False):
-    """Scalar appraisal dimension with lightweight metadata."""
-
-    score: float
-    confidence: float
-    rationale_short: str
-    trend: str
-    driver_cues: list[str]
-
-
 class AppraisalSlice(TypedDict, total=False):
-    """Subjective meaning assigned to the current turn."""
+    """Relational interpretation of the latest user turn."""
 
-    social_cues: list[SocialCueSlice]
-    perceived_acceptance: AppraisalDimensionSlice
-    perceived_rejection: AppraisalDimensionSlice
-    perceived_competition: AppraisalDimensionSlice
-    perceived_distance: AppraisalDimensionSlice
-    ambiguity: AppraisalDimensionSlice
-    face_threat: AppraisalDimensionSlice
-    attachment_activation: AppraisalDimensionSlice
-    repair_opportunity: AppraisalDimensionSlice
-    dominant_appraisal: str | None
-    dominant_appraisal_confidence: float
-    active_wounds: list[str]
+    event_type: str
+    valence: str
+    target_of_tension: str
+    stakes: str
+    confidence: float
+    cues: list[AppraisalCueSlice]
     summary_short: str
+    user_intent_guess: str
+    active_themes: list[str]
 
 
-class SocialIntentHypothesisSlice(TypedDict, total=False):
-    """Current guess about what the user is trying to do socially."""
+class IdImpulseSlice(TypedDict, total=False):
+    """Immediate wants activated by the current user turn."""
 
-    label: str
-    confidence: float
-    supporting_cues: list[str]
-
-
-class SocialModelSlice(TypedDict, total=False):
-    """Working model of the user carried across turns."""
-
-    user_current_intent_hypotheses: list[SocialIntentHypothesisSlice]
-    user_attachment_guess: str
-    user_sensitivity_guess: list[str]
-    confidence: float
-    recent_prediction_errors: list[str]
-    last_user_action: str
+    dominant_want: str
+    secondary_wants: list[str]
+    intensity: float
+    target: str
 
 
-class SelfStateSlice(TypedDict, total=False):
-    """Internal self-protective state for the persona."""
+class SuperegoPressureSlice(TypedDict, total=False):
+    """Constraints and self-image pressures active on this turn."""
 
-    threatened_self_image: list[str]
-    pride_level: float
-    shame_activation: float
-    dependency_fear: float
-    desire_for_closeness: float
-    urge_to_test_user: float
-    active_defenses: list[str]
+    forbidden_moves: list[str]
+    self_image_to_protect: str
+    pressure: float
+    shame_load: float
+
+
+class EgoMoveSlice(TypedDict, total=False):
+    """Integrated social move selected for this turn."""
+
+    social_move: str
+    move_rationale: str
+    dominant_compromise: str
+    stability: float
+
+
+class ResidueSlice(TypedDict, total=False):
+    """What leaks through after partial containment."""
+
+    visible_emotion: str
+    leak_channel: str
+    residue_text_intent: str
+    intensity: float
+
+
+class ExpressionEnvelopeSlice(TypedDict, total=False):
+    """Low-dimensional rendering constraints derived from conflict outcome."""
+
+    length: str
+    temperature: str
+    directness: float
+    closure: float
+
+
+class ConflictStateSlice(TypedDict, total=False):
+    """Full conflict-engine output for a single turn."""
+
+    id_impulse: IdImpulseSlice
+    superego_pressure: SuperegoPressureSlice
+    ego_move: EgoMoveSlice
+    residue: ResidueSlice
+    expression_envelope: ExpressionEnvelopeSlice
 
 
 class DriveAxisSlice(TypedDict, total=False):
@@ -190,7 +233,7 @@ class DriveAxisSlice(TypedDict, total=False):
 
 
 class DriveStateSlice(TypedDict, total=False):
-    """Persistent motivational state used as source of truth."""
+    """Persistent motivational state kept across turns."""
 
     drive_vector: dict[str, float]
     top_drives: list[DriveAxisSlice]
@@ -204,76 +247,14 @@ class DriveStateSlice(TypedDict, total=False):
     summary_short: str
 
 
-class InhibitionStateSlice(TypedDict, total=False):
-    """Self-protective constraints that block or permit action modes."""
+class ConflictMemoryEntrySlice(TypedDict, total=False):
+    """Compact record of a recent unresolved or notable conflict turn."""
 
-    role_pressure: float
-    face_preservation: float
-    dependency_fear: float
-    pride_level: float
-    allowed_modes: list[str]
-    blocked_modes: list[str]
-    preferred_defenses: list[str]
-    blocked_drives: list[str]
-
-
-class ActionCandidateSlice(TypedDict, total=False):
-    """One social action option under consideration."""
-
-    mode: str
-    label: str
-    score: float
-    rationale_short: str
-    risk_level: float
-    defense_hint: str
-    supporting_appraisals: list[str]
-    estimated_user_impact: str
-
-
-class ConversationPolicySlice(TypedDict, total=False):
-    """Selected action policy for the current turn."""
-
-    selected_mode: str
-    candidates: list[ActionCandidateSlice]
-    selection_rationale: str
-    fallback_mode: str
-    target_user_effect: str
-    drive_rationale: list[str]
-    competing_drives: list[str]
-    blocked_by_inhibition: list[str]
-    satisfaction_goal: str
-    max_leakage: float
-    max_directness: float
-    blocked_modes: list[str]
-
-
-class UtteranceBlueprintSlice(TypedDict, total=False):
-    """A single plausible utterance direction before surface text is finalized."""
-
-    label: str
-    mode: str
-    opening_style: str
-    interpersonal_move: str
-    latent_signal: str
-    must_include: list[str]
-    avoid: list[str]
-
-
-class UtterancePlanSlice(TypedDict, total=False):
-    """Intermediate plan for candidate-based utterance generation."""
-
-    surface_intent: str
-    hidden_pressure: str
-    defense_applied: str
-    mask_goal: str
-    expression_settings: dict
-    tone_profile: dict
-    leakage_level: float
-    containment_success: float
-    rupture_points: list[str]
-    integration_rationale: str
-    selection_criteria: list[str]
-    candidates: list[UtteranceBlueprintSlice]
+    event_type: str
+    ego_move: str
+    residue: str
+    user_impact: str
+    relationship_delta: str
 
 
 class WorkingMemorySlice(TypedDict, total=False):
@@ -284,45 +265,34 @@ class WorkingMemorySlice(TypedDict, total=False):
     retrieved_memory_ids: list[str]
     unresolved_questions: list[str]
     current_episode_summary: str | None
-    last_user_intent_prediction: str | None
+    recent_conflict_summaries: list[ConflictMemoryEntrySlice]
 
 
-# ---------------------------------------------------------------------------
-# dynamics slice
-# ---------------------------------------------------------------------------
-class DynamicsSlice(TypedDict, total=False):
-    """Turn-local dynamics summary; no longer the source of truth for desire."""
+class MemoryInterpretationSlice(TypedDict, total=False):
+    """LLM-derived persistence interpretation for the completed turn."""
 
-    id_output: dict
-    ego_output: dict
-    superego_output: dict
-    defense_output: dict
-    drive_axes: list[DriveAxisSlice]
-    target_lock: float
-    suppression_risk: float
-    affective_pressure: float
+    event_flags: dict[str, bool]
+    unresolved_tension_summary: list[str]
+    emotional_memories: list[dict]
+    semantic_preferences: list[dict]
+    active_themes: list[str]
+    current_episode_summary: str | None
+    recent_conflict_summary: ConflictMemoryEntrySlice | None
+    rationale_short: str
 
 
-# ---------------------------------------------------------------------------
-# trace slice
-# ---------------------------------------------------------------------------
 class TraceSlice(TypedDict, total=False):
-    """Debug / research trace."""
+    """Debug and research trace."""
 
-    social_cue: dict | None
-    appraisal: dict | None
-    action_arbitration: dict | None
-    utterance_planner: dict | None
-    surface_realization: dict | None
-    internal_dynamics: dict | None
-    supervisor: dict | None
-    memory_commit: dict | None
-    error: dict | None
+    appraisal: dict[str, Any] | None
+    conflict_engine: dict[str, Any] | None
+    expression_realizer: dict[str, Any] | None
+    fidelity_gate: dict[str, Any] | None
+    memory_interpreter: dict[str, Any] | None
+    memory_commit: dict[str, Any] | None
+    error: dict[str, Any] | None
 
 
-# ---------------------------------------------------------------------------
-# _internal slice (extends agent-contracts BaseInternalSlice)
-# ---------------------------------------------------------------------------
 class InternalSlice(TypedDict, total=False):
     """Internal bookkeeping state."""
 
@@ -337,8 +307,6 @@ class InternalSlice(TypedDict, total=False):
     decision_trace: list
     visited_subgraphs: dict
     step_count: int
-
-    # SplitMind-specific
     session: dict
     event_flags: dict
     errors: list[dict]

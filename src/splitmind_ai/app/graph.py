@@ -1,59 +1,41 @@
-"""Graph builder and registry for SplitMind-AI.
-
-Registers all nodes, configures the graph, and provides a build function.
-"""
+"""Graph builder and registry for next-generation SplitMind-AI."""
 
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from agent_contracts import (
-    build_graph_from_registry,
-    get_node_registry,
-    reset_registry,
-)
+from agent_contracts import build_graph_from_registry, get_node_registry, reset_registry
 from agent_contracts.supervisor import GenericSupervisor
 from langchain_core.language_models import BaseChatModel
 
 from splitmind_ai.memory.vault_store import VaultStore
-from splitmind_ai.nodes.action_arbitration import ActionArbitrationNode
 from splitmind_ai.nodes.appraisal import AppraisalNode
+from splitmind_ai.nodes.conflict_engine import ConflictEngineNode
 from splitmind_ai.nodes.error_handler import ErrorNode
-from splitmind_ai.nodes.internal_dynamics import InternalDynamicsNode
+from splitmind_ai.nodes.expression_realizer import ExpressionRealizerNode
+from splitmind_ai.nodes.fidelity_gate import FidelityGateNode
+from splitmind_ai.nodes.memory_interpreter import MemoryInterpreterNode
 from splitmind_ai.nodes.memory_commit import MemoryCommitNode
-from splitmind_ai.nodes.motivational_state import MotivationalStateNode
-from splitmind_ai.nodes.persona_supervisor import PersonaSupervisorNode
-from splitmind_ai.nodes.surface_realization import SurfaceRealizationNode
 from splitmind_ai.nodes.session_bootstrap import SessionBootstrapNode
-from splitmind_ai.nodes.social_cue import SocialCueNode
-from splitmind_ai.nodes.utterance_planner import UtterancePlannerNode
 from splitmind_ai.state.agent_state import CUSTOM_SLICES, SplitMindAgentState
 
 logger = logging.getLogger(__name__)
 
 
 def register_all_nodes(persona_name: str = "cold_attached_idol") -> None:
-    """Register all SplitMind nodes in the global registry.
-
-    This must be called before building the graph.
-    """
+    """Register all active SplitMind nodes in the global registry."""
     registry = get_node_registry()
 
-    # Register custom slices
     for slice_name in CUSTOM_SLICES:
         registry.add_valid_slice(slice_name)
 
-    # Register nodes
     registry.register(SessionBootstrapNode)
-    registry.register(InternalDynamicsNode)
-    registry.register(MotivationalStateNode)
-    registry.register(SocialCueNode)
     registry.register(AppraisalNode)
-    registry.register(ActionArbitrationNode)
-    registry.register(PersonaSupervisorNode)
-    registry.register(UtterancePlannerNode)
-    registry.register(SurfaceRealizationNode)
+    registry.register(ConflictEngineNode)
+    registry.register(ExpressionRealizerNode)
+    registry.register(FidelityGateNode)
+    registry.register(MemoryInterpreterNode)
     registry.register(MemoryCommitNode)
     registry.register(ErrorNode)
 
@@ -62,22 +44,13 @@ def build_splitmind_graph(
     llm: BaseChatModel,
     persona_name: str = "cold_attached_idol",
     vault_path: str | None = None,
+    max_iterations: int | None = None,
 ) -> Any:
-    """Build and return a compiled LangGraph for SplitMind-AI.
-
-    Args:
-        llm: The LangChain chat model to use for LLM-dependent nodes.
-        persona_name: Name of the persona config to load.
-        vault_path: Path to Obsidian vault. None disables vault persistence.
-
-    Returns:
-        A compiled LangGraph StateGraph ready for invocation.
-    """
+    """Build and return a compiled LangGraph for SplitMind-AI."""
     reset_registry()
     register_all_nodes(persona_name=persona_name)
 
     vault_store = VaultStore(vault_path) if vault_path else None
-    registry = get_node_registry()
     logger.debug(
         "Building SplitMind graph persona=%s vault_path=%s llm=%s",
         persona_name,
@@ -86,7 +59,7 @@ def build_splitmind_graph(
     )
 
     graph = build_graph_from_registry(
-        registry=registry,
+        registry=get_node_registry(),
         llm=None,
         llm_provider=(lambda: llm) if llm is not None else None,
         supervisors=["main"],
@@ -94,6 +67,7 @@ def build_splitmind_graph(
             supervisor_name=name,
             llm=None,
             registry=get_node_registry(),
+            max_iterations=max_iterations,
         ),
         state_class=SplitMindAgentState,
         dependency_provider=lambda contract: _provide_dependencies(contract, persona_name, vault_store),
