@@ -27,6 +27,14 @@ class PersonaConfig:
         return self._model.psychodynamics.model_dump(mode="json")
 
     @property
+    def gender(self) -> str:
+        return self._model.gender
+
+    @property
+    def identity(self) -> dict[str, Any]:
+        return self._model.identity.model_dump(mode="json")
+
+    @property
     def relational_profile(self) -> dict[str, Any]:
         return self._model.relational_profile.model_dump(mode="json")
 
@@ -41,6 +49,10 @@ class PersonaConfig:
     @property
     def safety_boundary(self) -> dict[str, Any]:
         return self._model.safety_boundary.model_dump(mode="json")
+
+    @property
+    def relational_policy(self) -> dict[str, Any]:
+        return self._model.relational_policy.model_dump(mode="json")
 
     def to_slice(self) -> dict[str, Any]:
         """Convert to PersonaSlice dict for the agent state."""

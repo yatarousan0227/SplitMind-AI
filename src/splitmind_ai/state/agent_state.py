@@ -6,6 +6,7 @@ from typing import TypedDict
 
 from splitmind_ai.state.slices import (
     AppraisalSlice,
+    ComparisonPolicySlice,
     ConflictStateSlice,
     ConversationSlice,
     DriveStateSlice,
@@ -14,10 +15,14 @@ from splitmind_ai.state.slices import (
     MemoryInterpretationSlice,
     MoodSlice,
     PersonaSlice,
+    RelationalPolicySlice,
+    RepairPolicySlice,
+    ResidueStateSlice,
     RelationshipStateSlice,
     RequestSlice,
     ResponseSlice,
     TraceSlice,
+    TurnShapingPolicySlice,
     WorkingMemorySlice,
 )
 
@@ -29,11 +34,16 @@ class SplitMindAgentState(TypedDict, total=False):
     response: ResponseSlice
     conversation: ConversationSlice
     persona: PersonaSlice
+    relational_policy: RelationalPolicySlice
     relationship_state: RelationshipStateSlice
     mood: MoodSlice
     memory: MemorySlice
     appraisal: AppraisalSlice
     conflict_state: ConflictStateSlice
+    turn_shaping_policy: TurnShapingPolicySlice
+    repair_policy: RepairPolicySlice
+    comparison_policy: ComparisonPolicySlice
+    residue_state: ResidueStateSlice
     drive_state: DriveStateSlice
     working_memory: WorkingMemorySlice
     memory_interpretation: MemoryInterpretationSlice
@@ -46,11 +56,16 @@ CUSTOM_SLICES: list[str] = [
     "response",
     "conversation",
     "persona",
+    "relational_policy",
     "relationship_state",
     "mood",
     "memory",
     "appraisal",
     "conflict_state",
+    "turn_shaping_policy",
+    "repair_policy",
+    "comparison_policy",
+    "residue_state",
     "drive_state",
     "working_memory",
     "memory_interpretation",

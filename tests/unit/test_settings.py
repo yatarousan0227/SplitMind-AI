@@ -15,8 +15,8 @@ def test_load_settings_reads_dotenv_and_applies_env_overrides(tmp_path, monkeypa
                 "  model: yaml-model",
                 "  azure_deployment: yaml-deployment",
                 '  api_version: "2024-01-01-preview"',
-                "vault:",
-                "  path: ./vault-from-yaml",
+                "memory_store:",
+                "  path: ./memory-from-yaml",
                 "  enabled: true",
                 "personas:",
                 "  default: yaml-persona",
@@ -35,8 +35,8 @@ def test_load_settings_reads_dotenv_and_applies_env_overrides(tmp_path, monkeypa
                 "AZURE_OPENAI_DEPLOYMENT=dotenv-deployment",
                 "AZURE_OPENAI_API_VERSION=2024-12-01-preview",
                 "SPLITMIND_PERSONA=dotenv-persona",
-                "SPLITMIND_VAULT_PATH=./vault-from-dotenv",
-                "SPLITMIND_VAULT_ENABLED=false",
+                "SPLITMIND_MEMORY_STORE_PATH=./memory-from-dotenv",
+                "SPLITMIND_MEMORY_STORE_ENABLED=false",
             ]
         ),
         encoding="utf-8",
@@ -49,6 +49,8 @@ def test_load_settings_reads_dotenv_and_applies_env_overrides(tmp_path, monkeypa
     monkeypatch.delenv("SPLITMIND_LLM_PROVIDER", raising=False)
     monkeypatch.delenv("SPLITMIND_LLM_MODEL", raising=False)
     monkeypatch.delenv("SPLITMIND_PERSONA", raising=False)
+    monkeypatch.delenv("SPLITMIND_MEMORY_STORE_PATH", raising=False)
+    monkeypatch.delenv("SPLITMIND_MEMORY_STORE_ENABLED", raising=False)
     monkeypatch.delenv("SPLITMIND_VAULT_PATH", raising=False)
     monkeypatch.delenv("SPLITMIND_VAULT_ENABLED", raising=False)
 
@@ -59,8 +61,8 @@ def test_load_settings_reads_dotenv_and_applies_env_overrides(tmp_path, monkeypa
     assert settings.llm.azure_deployment == "dotenv-deployment"
     assert settings.llm.api_version == "2024-12-01-preview"
     assert settings.personas.default == "dotenv-persona"
-    assert settings.vault.path == "./vault-from-dotenv"
-    assert settings.vault.enabled is False
+    assert settings.memory_store.path == "./memory-from-dotenv"
+    assert settings.memory_store.enabled is False
 
 
 def test_load_settings_without_config_still_uses_env(tmp_path, monkeypatch):

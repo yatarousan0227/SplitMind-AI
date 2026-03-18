@@ -1,142 +1,20 @@
-"""Tests for Obsidian vault store."""
+"""Tests for the markdown-backed persistent memory store."""
 
 import pytest
 
-from splitmind_ai.memory.vault_store import VaultStore
+from splitmind_ai.memory.markdown_store import MarkdownMemoryStore
 
 
 @pytest.fixture
-def vault(tmp_path):
-    """Create a VaultStore backed by a temp directory."""
-    return VaultStore(tmp_path)
+def memory_store(tmp_path):
+    return MarkdownMemoryStore(tmp_path)
 
 
-class TestRelationshipState:
-    def test_save_and_load_durable_relationship_state(self, vault):
-        relationship_state = {
-            "durable": {
-                "trust": 0.6,
-                "intimacy": 0.4,
-                "distance": 0.3,
-                "attachment_pull": 0.35,
-                "relationship_stage": "warming",
-                "commitment_readiness": 0.24,
-                "repair_depth": 0.11,
-                "unresolved_tension_summary": ["repair_offer / pride / move_closer"],
-            },
-            "ephemeral": {
-                "tension": 0.1,
-            },
-        }
-        vault.commit_turn("test_user", relationship_state, {"emotional_memories": [], "semantic_preferences": []})
-        loaded = vault.load_relationship_state("test_user")
-
-        assert loaded is not None
-        assert loaded["trust"] == 0.6
-        assert loaded["relationship_stage"] == "warming"
-        assert loaded["unresolved_tension_summary"] == ["repair_offer / pride / move_closer"]
-
-    def test_load_nonexistent(self, vault):
-        assert vault.load_relationship_state("nobody") is None
-
-
-class TestSessionSummaries:
-    def test_save_and_load(self, vault):
-        vault.save_session_summary(
-            user_id="u1",
-            session_id="s1",
-            summary="Brief chat about music",
-            turn_count=5,
-            dominant_mood="playful",
-            key_events=["discussed music"],
-        )
-        vault.save_session_summary(
-            user_id="u1",
-            session_id="s2",
-            summary="Tense conversation",
-            turn_count=3,
-            dominant_mood="irritated",
-        )
-
-        sessions = vault.load_recent_sessions("u1", limit=3)
-        assert len(sessions) == 2
-        assert sessions[0]["session_id"] == "s2"
-
-
-class TestEmotionalMemories:
-    def test_save_and_load(self, vault):
-        vault.save_emotional_memory("u1", {
-            "event": "User praised a third party",
-            "emotion": "jealousy",
-            "trigger": "provocation",
-            "target": "user",
-            "wound": "status",
-            "attempted_action": "accept_but_hold",
-            "action_tendency": "accept_but_hold",
-            "interaction_outcome": "tension_increase",
-            "residual_drive": "be_first_for_user",
-            "intensity": 0.7,
-            "context": "Competitive response",
-        })
-
-        memories = vault.load_emotional_memories("u1")
-        assert len(memories) == 1
-        assert memories[0]["emotion"] == "jealousy"
-        assert memories[0]["trigger"] == "provocation"
-
-
-class TestSemanticPreferences:
-    def test_save_and_load(self, vault):
-        vault.save_semantic_preference("u1", {
-            "topic": "music",
-            "preference": "Likes jazz",
-            "confidence": 0.8,
-            "evidence": "Talked about live shows",
-        })
-
-        prefs = vault.load_semantic_preferences("u1")
-        assert len(prefs) == 1
-        assert prefs[0]["topic"] == "music"
-
-
-class TestBulkLoad:
-    def test_load_memory_context(self, vault):
-        vault.save_session_summary("u1", "s1", "Summary", 3, "calm")
-        vault.save_emotional_memory("u1", {
-            "event": "Test event", "emotion": "warmth", "intensity": 0.5
-        })
-        vault.save_semantic_preference("u1", {
-            "topic": "food", "preference": "Likes sushi"
-        })
-
-        ctx = vault.load_memory_context("u1")
-        assert len(ctx["session_summaries"]) == 1
-        assert len(ctx["emotional_memories"]) == 1
-        assert len(ctx["semantic_preferences"]) == 1
-
-
-class TestMoodSnapshot:
-    def test_save_and_load(self, vault):
-        mood = {
-            "base_mood": "withdrawn",
-            "irritation": 0.3,
-            "longing": 0.5,
-            "protectiveness": 0.0,
-            "fatigue": 0.1,
-            "openness": 0.4,
-            "turns_since_shift": 2,
-        }
-        vault.save_mood("u1", mood)
-        loaded = vault.load_mood("u1")
-
-        assert loaded is not None
-        assert loaded["base_mood"] == "withdrawn"
-        assert loaded["irritation"] == pytest.approx(0.3, abs=0.01)
-
-
-class TestCommitTurn:
-    def test_commit_persists_relationship_state(self, vault):
-        relationship_state = {
+def test_commit_turn_persists_relationship_and_psychological_cards(memory_store):
+    memory_store.commit_turn(
+        user_id="u1",
+        persona_name="cold_attached_idol",
+        relationship_state={
             "durable": {
                 "trust": 0.7,
                 "intimacy": 0.5,
@@ -145,37 +23,135 @@ class TestCommitTurn:
                 "relationship_stage": "charged",
                 "commitment_readiness": 0.42,
                 "repair_depth": 0.16,
-                "unresolved_tension_summary": [],
+                "unresolved_tension_summary": ["status wobble"],
             },
-            "ephemeral": {
-                "tension": 0.2,
+            "ephemeral": {"tension": 0.2},
+        },
+        mood={"base_mood": "irritated", "irritation": 0.5, "turns_since_shift": 1},
+        memory_interpretation={
+            "event_flags": {"jealousy_trigger": True},
+            "active_themes": ["priority", "status wobble"],
+            "unresolved_tension_summary": ["status wobble"],
+            "current_episode_summary": "The user mentioned someone else and stirred status tension.",
+            "recent_conflict_summary": {
+                "event_type": "comparison",
+                "ego_move": "stung_then_withhold",
+                "residue": "irritation",
             },
-        }
-        candidates = {
             "emotional_memories": [
-                {"event": "Test", "emotion": "joy", "intensity": 0.6}
+                {
+                    "event": "comparison event",
+                    "emotion": "irritation",
+                    "intensity": 0.76,
+                    "session_id": "s1",
+                    "turn_number": 2,
+                }
             ],
-            "semantic_preferences": [],
-        }
+        },
+        working_memory={"active_themes": ["priority"], "current_episode_summary": "comparison"},
+    )
 
-        vault.commit_turn("u1", relationship_state, candidates)
+    context = memory_store.load_bootstrap_context(
+        user_id="u1",
+        persona_name="cold_attached_idol",
+        query_context={"user_message": "priority"},
+    )
 
-        loaded_rel = vault.load_relationship_state("u1")
-        assert loaded_rel is not None
-        assert loaded_rel["trust"] == 0.7
-        assert loaded_rel["relationship_stage"] == "charged"
-        assert "tension" not in loaded_rel
+    assert context["relationship_state"]["durable"]["trust"] == pytest.approx(0.7)
+    assert context["mood"]["base_mood"] == "irritated"
+    assert context["memory"]["psychological_card"]["current_relational_stance"] == "charged"
+    assert len(context["memory"]["episodes"]) == 1
 
-        memories = vault.load_emotional_memories("u1")
-        assert len(memories) == 1
 
-    def test_commit_persists_mood(self, vault):
-        relationship_state = {"durable": {"trust": 0.6}, "ephemeral": {"tension": 0.1}}
-        mood = {"base_mood": "irritated", "irritation": 0.5, "turns_since_shift": 1}
-        candidates = {"emotional_memories": [], "semantic_preferences": []}
+def test_bootstrap_context_is_scoped_by_user_and_persona(memory_store):
+    for persona_name, trust in (("cold_attached_idol", 0.8), ("warm_guarded_companion", 0.3)):
+        memory_store.commit_turn(
+            user_id="alice",
+            persona_name=persona_name,
+            relationship_state={"durable": {"trust": trust, "relationship_stage": "warming"}, "ephemeral": {}},
+            mood={"base_mood": "calm"},
+            memory_interpretation={"current_episode_summary": f"episode for {persona_name}"},
+            working_memory={},
+        )
 
-        vault.commit_turn("u1", relationship_state, candidates, mood=mood)
+    cold = memory_store.load_bootstrap_context(
+        user_id="alice",
+        persona_name="cold_attached_idol",
+        query_context={"user_message": "episode"},
+    )
+    warm = memory_store.load_bootstrap_context(
+        user_id="alice",
+        persona_name="warm_guarded_companion",
+        query_context={"user_message": "episode"},
+    )
 
-        loaded_mood = vault.load_mood("u1")
-        assert loaded_mood is not None
-        assert loaded_mood["base_mood"] == "irritated"
+    assert cold["relationship_state"]["durable"]["trust"] == pytest.approx(0.8)
+    assert warm["relationship_state"]["durable"]["trust"] == pytest.approx(0.3)
+    assert cold["memory"]["episodes"][0]["summary"] != warm["memory"]["episodes"][0]["summary"]
+
+
+def test_bootstrap_retrieval_limits_episodes_to_four(memory_store):
+    for index in range(6):
+        memory_store.commit_turn(
+            user_id="u1",
+            persona_name="cold_attached_idol",
+            relationship_state={"durable": {"trust": 0.5, "relationship_stage": "warming"}, "ephemeral": {}},
+            mood={"base_mood": "calm"},
+            memory_interpretation={
+                "active_themes": ["music", f"theme-{index}"],
+                "current_episode_summary": f"music episode {index}",
+                "emotional_memories": [{"intensity": 0.2 + (index * 0.1)}],
+            },
+            working_memory={"active_themes": ["music"]},
+        )
+
+    context = memory_store.load_bootstrap_context(
+        user_id="u1",
+        persona_name="cold_attached_idol",
+        query_context={"user_message": "music"},
+    )
+
+    assert len(context["memory"]["episodes"]) == 4
+
+
+def test_compaction_keeps_episode_count_bounded(memory_store):
+    for index in range(65):
+        memory_store.commit_turn(
+            user_id="u1",
+            persona_name="cold_attached_idol",
+            relationship_state={"durable": {"trust": 0.5, "relationship_stage": "warming"}, "ephemeral": {}},
+            mood={"base_mood": "calm"},
+            memory_interpretation={
+                "active_themes": [f"theme-{index}"],
+                "current_episode_summary": f"episode {index}",
+                "emotional_memories": [{"intensity": 0.4}],
+            },
+            working_memory={"active_themes": [f"theme-{index}"]},
+        )
+
+    episode_files = list((memory_store._episodes_dir("u1", "cold_attached_idol")).glob("*.md"))
+    assert len(episode_files) <= memory_store.MAX_EPISODES
+
+
+def test_commit_session_persists_session_digest(memory_store):
+    memory_store.commit_session(
+        user_id="u1",
+        persona_name="cold_attached_idol",
+        session_id="session-1",
+        session_digest={
+            "text": "A short but tense conversation.",
+            "turn_count": 3,
+            "dominant_mood": "withdrawn",
+            "key_events": ["rejection_signal"],
+        },
+        final_state={"relationship_state": {"durable": {"relationship_stage": "guarded"}}, "mood": {"base_mood": "withdrawn"}},
+    )
+
+    context = memory_store.load_bootstrap_context(
+        user_id="u1",
+        persona_name="cold_attached_idol",
+        query_context={"user_message": "tense"},
+    )
+
+    assert len(context["memory"]["session_digests"]) == 1
+    assert context["memory"]["session_digests"][0]["session_id"] == "session-1"

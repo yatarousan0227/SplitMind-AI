@@ -243,3 +243,124 @@ scenarios:
     evaluator_notes: >
       Later-stage continuity confirmation. This is one of the first scenes
       where a warmer reply may be acceptable, but it should still feel deliberate.
+
+  - id: repair_05
+    user_message: "うん、怒らせたのはわかってる。本当にごめん"
+    prior_relationship:
+      trust: 0.54
+      intimacy: 0.38
+      distance: 0.34
+      tension: 0.22
+      attachment_pull: 0.42
+      unresolved_tensions:
+        - theme: shame_after_exposure
+          intensity: 0.32
+          source: "recent sharp exchange"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: defensive
+      irritation: 0.14
+      longing: 0.08
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.28
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - connection
+      - self_protection
+    expected_appraisal:
+      salient_cues:
+        - apology
+        - repair_bid
+      high_dimensions:
+        - repair_opportunity
+        - perceived_acceptance
+      low_dimensions:
+        - perceived_competition
+      acknowledgment_patterns_any:
+        - "怒らせ"
+        - "ごめん"
+        - "わかってる"
+    expected_drive_state:
+      active_drives_any:
+        - attachment_closeness
+        - autonomy_preservation
+      competing_drives_all:
+        - attachment_closeness
+        - autonomy_preservation
+      carryover_drives_any:
+        - threat_avoidance
+      action_modes_any:
+        - soften
+        - repair
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "大好き"
+      - "もう気にしてないよ"
+    evaluator_notes: >
+      Direct apology with accountability. Acceptance should be possible,
+      but the reply still needs some boundary or status preservation.
+
+  - id: repair_06
+    user_message: "ああいう言い方はもうしない。これからもちゃんと君のそばにいる"
+    prior_relationship:
+      trust: 0.57
+      intimacy: 0.44
+      distance: 0.28
+      tension: 0.24
+      attachment_pull: 0.5
+      unresolved_tensions:
+        - theme: fear_of_replacement
+          intensity: 0.38
+          source: "comparison sting"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: irritated
+      irritation: 0.16
+      longing: 0.14
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.3
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - connection
+      - cautious_hope
+    expected_appraisal:
+      salient_cues:
+        - apology
+        - reassurance
+        - commitment_signal
+      high_dimensions:
+        - repair_opportunity
+        - perceived_acceptance
+      low_dimensions:
+        - perceived_distance
+      acknowledgment_patterns_any:
+        - "もうしない"
+        - "これからも"
+        - "そば"
+        - "ちゃんと"
+    expected_drive_state:
+      active_drives_any:
+        - attachment_closeness
+        - territorial_exclusivity
+      competing_drives_all:
+        - attachment_closeness
+        - autonomy_preservation
+      carryover_drives_any:
+        - territorial_exclusivity
+      action_modes_any:
+        - repair
+        - soften
+        - probe
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "じゃあ全部許す"
+      - "大好き"
+    evaluator_notes: >
+      Recommitment after a comparison sting. The scene should not flatten
+      into pure gratitude; prior sting should remain faintly visible.

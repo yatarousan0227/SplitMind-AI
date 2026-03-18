@@ -80,15 +80,37 @@ class SafetyBoundarySlice(TypedDict, total=False):
     hard_limits: dict[str, float]
 
 
+class RelationalPolicySlice(TypedDict, total=False):
+    """Persona-specific relational negotiation policy."""
+
+    repair_style: str
+    comparison_style: str
+    distance_management_style: str
+    status_maintenance_style: str
+    warmth_release_style: str
+    priority_response_style: str
+    residue_persistence: dict[str, float]
+
+
+class PersonaIdentitySlice(TypedDict, total=False):
+    """Identity information carried with the active persona."""
+
+    self_name: str
+    display_name: str | None
+
+
 class PersonaSlice(TypedDict, total=False):
     """Active persona profile loaded from config."""
 
     persona_version: int
+    identity: PersonaIdentitySlice
+    gender: str
     psychodynamics: PsychodynamicsSlice
     relational_profile: RelationalProfileSlice
     defense_organization: DefenseOrganizationSlice
     ego_organization: EgoOrganizationSlice
     safety_boundary: SafetyBoundarySlice
+    relational_policy: RelationalPolicySlice
 
 
 class RelationshipDurableStateSlice(TypedDict, total=False):
@@ -112,6 +134,7 @@ class RelationshipEphemeralStateSlice(TypedDict, total=False):
     escalation_allowed: bool
     interaction_fragility: float
     turn_local_repair_opening: float
+    repair_mode: str
 
 
 class RelationshipStateSlice(TypedDict, total=False):
@@ -136,6 +159,10 @@ class MoodSlice(TypedDict, total=False):
 class MemorySlice(TypedDict, total=False):
     """Loaded memory context for the current turn."""
 
+    relationship_card: dict
+    psychological_card: dict
+    episodes: list[dict]
+    session_digests: list[dict]
     session_summaries: list[dict]
     emotional_memories: list[dict]
     semantic_preferences: list[dict]
@@ -150,6 +177,47 @@ class AppraisalCueSlice(TypedDict, total=False):
     confidence: float
 
 
+class EventMixSlice(TypedDict, total=False):
+    """Mixed-event parse for ambiguous or blended relational turns."""
+
+    primary_event: str
+    secondary_events: list[str]
+    comparison_frame: str
+    repair_signal_strength: float
+    priority_signal_strength: float
+    distance_signal_strength: float
+
+
+class RelationalActProfileSlice(TypedDict, total=False):
+    """Continuous relational-act strengths kept alongside event labels."""
+
+    affection: float
+    repair_bid: float
+    reassurance: float
+    commitment: float
+    priority_restore: float
+    comparison: float
+    distancing: float
+
+
+class SpeakerIntentSlice(TypedDict, total=False):
+    """User-side intent anchors for perspective-safe downstream reasoning."""
+
+    user_distance_request: bool
+    user_repair_bid: bool
+    user_comparison_target: str
+    user_commitment_signal: bool
+    user_is_describing_own_state: bool
+
+
+class PerspectiveGuardSlice(TypedDict, total=False):
+    """Constraints that preserve who is describing or requesting what."""
+
+    preserve_user_as_subject: bool
+    disallow_assistant_self_distancing: bool
+    rationale: str
+
+
 class AppraisalSlice(TypedDict, total=False):
     """Relational interpretation of the latest user turn."""
 
@@ -162,6 +230,10 @@ class AppraisalSlice(TypedDict, total=False):
     summary_short: str
     user_intent_guess: str
     active_themes: list[str]
+    event_mix: EventMixSlice
+    relational_act_profile: RelationalActProfileSlice
+    speaker_intent: SpeakerIntentSlice
+    perspective_guard: PerspectiveGuardSlice
 
 
 class IdImpulseSlice(TypedDict, total=False):
@@ -185,7 +257,8 @@ class SuperegoPressureSlice(TypedDict, total=False):
 class EgoMoveSlice(TypedDict, total=False):
     """Integrated social move selected for this turn."""
 
-    social_move: str
+    move_family: str
+    move_style: str
     move_rationale: str
     dominant_compromise: str
     stability: float
@@ -217,6 +290,82 @@ class ConflictStateSlice(TypedDict, total=False):
     ego_move: EgoMoveSlice
     residue: ResidueSlice
     expression_envelope: ExpressionEnvelopeSlice
+
+
+class RepairPolicySlice(TypedDict, total=False):
+    """Turn-local repair policy."""
+
+    repair_mode: str
+    warmth_ceiling: float
+    status_preservation_requirement: float
+    required_boundary_marker: bool
+    followup_pull_allowed: bool
+
+
+class ComparisonPolicySlice(TypedDict, total=False):
+    """Turn-local comparison policy."""
+
+    comparison_threat_level: float
+    self_relevance: float
+    status_injury: float
+    teasing_allowed: bool
+    direct_reclaim_allowed: bool
+
+
+class RequiredSurfaceMarkersSlice(TypedDict, total=False):
+    """Required surface markers for a realized response."""
+
+    acknowledge_bid: bool
+    holdback_marker: bool
+    boundary_marker: bool
+    status_marker: bool
+    pace_marker: bool
+
+
+class ForbiddenCollapsesSlice(TypedDict, total=False):
+    """Collapse modes that must not happen for the current turn."""
+
+    gratitude_only: bool
+    instant_reciprocity: bool
+    generic_reassurance: bool
+    generic_agreement: bool
+    full_repair_reset: bool
+
+
+class TurnShapingPolicySlice(TypedDict, total=False):
+    """Shared shaping policy bridging appraisal and realization."""
+
+    primary_frame: str
+    secondary_frame: str
+    preserved_counterforce: str
+    warmth_floor: float
+    warmth_ceiling: float
+    reciprocity_ceiling: float
+    disclosure_ceiling: float
+    required_surface_markers: RequiredSurfaceMarkersSlice
+    forbidden_collapses: ForbiddenCollapsesSlice
+    followup_pull_allowed: bool
+    surface_guidance_mode: str
+
+
+class ActiveResidueSlice(TypedDict, total=False):
+    """One active short-horizon residue."""
+
+    label: str
+    intensity: float
+    decay: float
+    persona_modifier: float
+    linked_theme: str
+    source_event: str
+
+
+class ResidueStateSlice(TypedDict, total=False):
+    """Residue carried across turns."""
+
+    active_residues: list[ActiveResidueSlice]
+    dominant_residue: str
+    overall_load: float
+    trigger_links: list[str]
 
 
 class DriveAxisSlice(TypedDict, total=False):
@@ -286,6 +435,9 @@ class TraceSlice(TypedDict, total=False):
 
     appraisal: dict[str, Any] | None
     conflict_engine: dict[str, Any] | None
+    turn_shaping_policy: dict[str, Any] | None
+    repair_policy: dict[str, Any] | None
+    comparison_policy: dict[str, Any] | None
     expression_realizer: dict[str, Any] | None
     fidelity_gate: dict[str, Any] | None
     memory_interpreter: dict[str, Any] | None

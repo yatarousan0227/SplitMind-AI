@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from splitmind_ai.app.language import detect_response_language
-from splitmind_ai.memory.vault_store import VaultStore
+from splitmind_ai.memory.markdown_store import MarkdownMemoryStore
 from splitmind_ai.app.llm import create_chat_llm
 from splitmind_ai.app.logging_utils import configure_logging, preview_text
 from splitmind_ai.app.settings import PROJECT_ROOT, get_default_persona, load_settings
@@ -56,10 +56,12 @@ def _build_turn_state(
 
     for slice_name in (
         "persona",
+        "relational_policy",
         "relationship_state",
         "mood",
         "memory",
         "working_memory",
+        "residue_state",
     ):
         slice_value = latest_state.get(slice_name)
         if isinstance(slice_value, dict):
@@ -93,7 +95,7 @@ async def run_turn(
     user_message: str,
     session_id: str = "cli-session",
     persona_name: str | None = None,
-    vault_path: str | None = None,
+    memory_store_path: str | None = None,
     user_id: str = "default",
     response_language: str | None = None,
 ) -> dict[str, Any]:
@@ -103,8 +105,8 @@ async def run_turn(
         user_message: The user's input text.
         session_id: Session identifier.
         persona_name: Override persona name. Uses config default if None.
-        vault_path: Path to Obsidian vault. None uses config default.
-        user_id: User identifier for vault storage.
+        memory_store_path: Path to markdown memory store. None uses config default.
+        user_id: User identifier for persistent memory.
 
     Returns:
         The final agent state dict after the turn.
@@ -117,17 +119,17 @@ async def run_turn(
     if persona_name is None:
         persona_name = get_default_persona(settings)
 
-    if vault_path is None and settings.vault.enabled:
-        vault_path = str(Path(settings.vault.path).resolve())
-        if not Path(vault_path).is_absolute():
-            vault_path = str(PROJECT_ROOT / settings.vault.path)
+    if memory_store_path is None and settings.memory_store.enabled:
+        memory_store_path = str(Path(settings.memory_store.path).resolve())
+        if not Path(memory_store_path).is_absolute():
+            memory_store_path = str(PROJECT_ROOT / settings.memory_store.path)
 
     llm = create_chat_llm(settings)
 
     compiled_graph = build_splitmind_graph(
         llm=llm,
         persona_name=persona_name,
-        vault_path=vault_path,
+        memory_store_path=memory_store_path,
         max_iterations=settings.runtime.max_iterations,
     )
 
@@ -148,11 +150,11 @@ async def run_turn(
     }
 
     logger.debug(
-        "run_turn start session_id=%s user_id=%s persona=%s vault_path=%s message=%s",
+        "run_turn start session_id=%s user_id=%s persona=%s memory_store_path=%s message=%s",
         session_id,
         user_id,
         persona_name,
-        vault_path,
+        memory_store_path,
         preview_text(user_message),
     )
     result = await compiled_graph.ainvoke(initial_state)
@@ -168,7 +170,7 @@ async def run_turn(
 
 async def run_session(
     persona_name: str | None = None,
-    vault_path: str | None = None,
+    memory_store_path: str | None = None,
     user_id: str = "default",
     session_id: str | None = None,
     response_language: str | None = None,
@@ -185,21 +187,21 @@ async def run_session(
         persona_name = get_default_persona(settings)
     if session_id is None:
         session_id = str(uuid.uuid4())[:8]
-    if vault_path is None and settings.vault.enabled:
-        vault_path = str((PROJECT_ROOT / settings.vault.path).resolve())
+    if memory_store_path is None and settings.memory_store.enabled:
+        memory_store_path = str((PROJECT_ROOT / settings.memory_store.path).resolve())
 
     llm = create_chat_llm(settings)
 
     compiled_graph = build_splitmind_graph(
         llm=llm,
         persona_name=persona_name,
-        vault_path=vault_path,
+        memory_store_path=memory_store_path,
         max_iterations=settings.runtime.max_iterations,
     )
 
-    vault_store: VaultStore | None = None
-    if vault_path:
-        vault_store = VaultStore(vault_path)
+    memory_store: MarkdownMemoryStore | None = None
+    if memory_store_path:
+        memory_store = MarkdownMemoryStore(memory_store_path)
 
     print(f"\n[Session: {session_id} | Persona: {persona_name}]")
     print("Type 'quit' to exit, 'trace' to toggle trace display.\n")
@@ -272,7 +274,7 @@ async def run_session(
             _print_trace(result)
 
     # Save session summary on exit
-    if turn_count > 0 and vault_store is not None:
+    if turn_count > 0 and memory_store is not None:
         try:
             summary = _build_session_summary(
                 messages=messages,
@@ -281,17 +283,22 @@ async def run_session(
                 final_state=latest_state,
                 event_log=session_event_log,
             )
-            vault_store.save_session_summary(
+            summary_payload = {
+                "text": summary["text"],
+                "turn_count": turn_count,
+                "dominant_mood": latest_state.get("mood", {}).get("base_mood", "calm"),
+                "key_events": summary["key_events"],
+            }
+            memory_store.commit_session(
                 user_id=user_id,
+                persona_name=persona_name,
                 session_id=session_id,
-                summary=summary["text"],
-                turn_count=turn_count,
-                dominant_mood=latest_state.get("mood", {}).get("base_mood", "calm"),
-                key_events=summary["key_events"],
+                session_digest=summary_payload,
+                final_state=latest_state,
             )
-            logger.info("Session summary saved for session_id=%s", session_id)
+            logger.info("Session digest saved for session_id=%s", session_id)
         except Exception:
-            logger.warning("Failed to save session summary", exc_info=True)
+            logger.warning("Failed to save session digest", exc_info=True)
 
 
 def _build_session_summary(
@@ -368,7 +375,10 @@ def _print_trace(result: dict[str, Any]) -> None:
         residue = conflict_state.get("residue", {}) or {}
         ego_move = conflict_state.get("ego_move", {}) or {}
         print(f"  [Trace] Dominant want: {id_impulse.get('dominant_want', '?')}")
-        print(f"  [Trace] Ego move: {ego_move.get('social_move', '?')}")
+        print(
+            "  [Trace] Ego move: "
+            f"{ego_move.get('move_family', '?')} / {ego_move.get('move_style', '?')}"
+        )
         print(f"  [Trace] Residue: {residue.get('visible_emotion', '?')}")
 
     if fidelity:
@@ -391,7 +401,10 @@ def _print_trace(result: dict[str, Any]) -> None:
 
     commit = trace.get("memory_commit", {})
     if commit:
-        print(f"  [Vault] Committed: {commit.get('vault_committed', False)}")
+        print(
+            f"  [Persistent Memory] Committed: "
+            f"{commit.get('memory_store_committed', commit.get('vault_committed', False))}"
+        )
 
     print()
 

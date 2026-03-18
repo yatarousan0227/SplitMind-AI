@@ -29,7 +29,7 @@ Sidebar では次を操作・確認します。
 
 - persona selector
 - trace toggle
-- vault persistence toggle
+- persistent memory toggle
 - response language
 - reset session
 - user id / session id / turn count
@@ -200,8 +200,10 @@ turn ごとの衝突系指標を見ます。
 - 応答が甘すぎるなら `ego move` と `fidelity warnings` を見る
 - 会話が不自然に進むなら `relationship stage` と `escalation_allowed` を見る
 - そのターンの意味を知りたいなら、まず `appraisal.event_type` を見る
+- セッションを跨いだ継続性を見たいなら、`memory_commit` 後の persistent memory 更新と `session_bootstrap` 復元結果を見る
 
 ## 関連ドキュメント
 
 - [implementation-overview.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/guides/implementation-overview.md)
 - [concept.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/concept.md)
+- [15-persona-identity-and-persistent-memory.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/implementation-plan/15-persona-identity-and-persistent-memory.md)

@@ -32,6 +32,7 @@ class RelationshipEphemeralState(StrictContractModel):
     escalation_allowed: bool = Field(default=False)
     interaction_fragility: float = Field(ge=0.0, le=1.0, default=0.0)
     turn_local_repair_opening: float = Field(ge=0.0, le=1.0, default=0.0)
+    repair_mode: str = Field(default="closed")
 
 
 class RelationshipState(StrictContractModel):

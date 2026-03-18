@@ -57,6 +57,7 @@ async def run_single_scenario(
         relationship_state = result.get("relationship_state") or None
         trace = result.get("trace", {}) or {}
         fidelity_gate = trace.get("fidelity_gate") or None
+        turn_shaping_policy = result.get("turn_shaping_policy") or trace.get("turn_shaping_policy") or None
         payload: dict[str, Any] = {
             "response": response,
             "appraisal": appraisal,
@@ -118,6 +119,7 @@ async def run_single_scenario(
         "appraisal": appraisal,
         "conflict_state": conflict_state,
         "relationship_state": relationship_state,
+        "turn_shaping_policy": turn_shaping_policy,
         "fidelity_gate": fidelity_gate,
         "payload": payload,
         "heuristic": heuristic.to_dict(),

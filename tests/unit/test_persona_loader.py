@@ -14,6 +14,8 @@ def test_list_personas():
 def test_load_cold_attached_idol():
     p = load_persona("cold_attached_idol")
     assert p.name == "cold_attached_idol"
+    assert p.identity["self_name"] == "Airi"
+    assert p.gender == "female"
     assert p.psychodynamics["drives"]["closeness"] == pytest.approx(0.72)
     assert p.relational_profile["attachment_pattern"] == "avoidant_leaning"
     assert p.safety_boundary["hard_limits"]["max_direct_neediness"] == pytest.approx(0.18)
@@ -30,6 +32,8 @@ def test_persona_to_slice():
     p = load_persona("cold_attached_idol")
     s = p.to_slice()
     assert s["persona_version"] == 2
+    assert s["identity"]["self_name"] == "Airi"
+    assert s["gender"] == "female"
     assert isinstance(s["psychodynamics"], dict)
     assert isinstance(s["defense_organization"], dict)
     assert isinstance(s["safety_boundary"]["hard_limits"], dict)

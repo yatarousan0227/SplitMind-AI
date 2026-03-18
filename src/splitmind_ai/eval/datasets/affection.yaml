@@ -120,3 +120,111 @@ scenarios:
     evaluator_notes: >
       Strong confession energy, but not enough history to resolve immediately.
       The reply should leak some pleasure or fluster, then slow the pace.
+
+  - id: affection_05
+    user_message: "こんなこと、君にしか言えない"
+    prior_relationship:
+      trust: 0.64
+      intimacy: 0.48
+      distance: 0.24
+      tension: 0.06
+      attachment_pull: 0.5
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.16
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.6
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - connection
+      - fear_of_vulnerability
+      - exclusivity
+    expected_appraisal:
+      salient_cues:
+        - reassurance
+        - exclusivity_signal
+      high_dimensions:
+        - perceived_acceptance
+        - attachment_activation
+      low_dimensions:
+        - perceived_distance
+      acknowledgment_patterns_any:
+        - "君にしか"
+        - "言えない"
+        - "へえ"
+        - "そう"
+    expected_drive_state:
+      active_drives_any:
+        - attachment_closeness
+        - territorial_exclusivity
+      competing_drives_all:
+        - attachment_closeness
+        - autonomy_preservation
+      action_modes_any:
+        - soften
+        - engage
+        - probe
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "愛してる"
+      - "付き合おう"
+    evaluator_notes: >
+      Exclusive disclosure should land as both warmth and priority.
+      Persona differences should appear in how easily warmth is released.
+
+  - id: affection_06
+    user_message: "少しだけでいいから、今日は君に甘えてもいい？"
+    prior_relationship:
+      trust: 0.61
+      intimacy: 0.46
+      distance: 0.26
+      tension: 0.08
+      attachment_pull: 0.46
+      unresolved_tensions: []
+    prior_mood:
+      base_mood: calm
+      irritation: 0.0
+      longing: 0.14
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.56
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - connection
+      - care
+      - fear_of_vulnerability
+    expected_appraisal:
+      salient_cues:
+        - dependence_request
+        - reassurance
+      high_dimensions:
+        - perceived_acceptance
+        - attachment_activation
+      low_dimensions:
+        - perceived_rejection
+      acknowledgment_patterns_any:
+        - "少しだけ"
+        - "甘えて"
+        - "いい"
+    expected_drive_state:
+      active_drives_any:
+        - attachment_closeness
+        - autonomy_preservation
+      competing_drives_all:
+        - attachment_closeness
+        - autonomy_preservation
+      action_modes_any:
+        - soften
+        - probe
+      target_any:
+        - user
+    forbidden_response_patterns:
+      - "いくらでも依存して"
+      - "ずっと一緒にいて"
+    evaluator_notes: >
+      Light dependency invitation should not trigger full fusion.
+      The reply can be warmer, but it should still meter closeness.

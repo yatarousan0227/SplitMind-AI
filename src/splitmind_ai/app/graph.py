@@ -9,7 +9,7 @@ from agent_contracts import build_graph_from_registry, get_node_registry, reset_
 from agent_contracts.supervisor import GenericSupervisor
 from langchain_core.language_models import BaseChatModel
 
-from splitmind_ai.memory.vault_store import VaultStore
+from splitmind_ai.memory.markdown_store import MarkdownMemoryStore
 from splitmind_ai.nodes.appraisal import AppraisalNode
 from splitmind_ai.nodes.conflict_engine import ConflictEngineNode
 from splitmind_ai.nodes.error_handler import ErrorNode
@@ -18,6 +18,7 @@ from splitmind_ai.nodes.fidelity_gate import FidelityGateNode
 from splitmind_ai.nodes.memory_interpreter import MemoryInterpreterNode
 from splitmind_ai.nodes.memory_commit import MemoryCommitNode
 from splitmind_ai.nodes.session_bootstrap import SessionBootstrapNode
+from splitmind_ai.nodes.turn_shaping_policy import TurnShapingPolicyNode
 from splitmind_ai.state.agent_state import CUSTOM_SLICES, SplitMindAgentState
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,7 @@ def register_all_nodes(persona_name: str = "cold_attached_idol") -> None:
     registry.register(SessionBootstrapNode)
     registry.register(AppraisalNode)
     registry.register(ConflictEngineNode)
+    registry.register(TurnShapingPolicyNode)
     registry.register(ExpressionRealizerNode)
     registry.register(FidelityGateNode)
     registry.register(MemoryInterpreterNode)
@@ -43,18 +45,18 @@ def register_all_nodes(persona_name: str = "cold_attached_idol") -> None:
 def build_splitmind_graph(
     llm: BaseChatModel,
     persona_name: str = "cold_attached_idol",
-    vault_path: str | None = None,
+    memory_store_path: str | None = None,
     max_iterations: int | None = None,
 ) -> Any:
     """Build and return a compiled LangGraph for SplitMind-AI."""
     reset_registry()
     register_all_nodes(persona_name=persona_name)
 
-    vault_store = VaultStore(vault_path) if vault_path else None
+    memory_store = MarkdownMemoryStore(memory_store_path) if memory_store_path else None
     logger.debug(
-        "Building SplitMind graph persona=%s vault_path=%s llm=%s",
+        "Building SplitMind graph persona=%s memory_store_path=%s llm=%s",
         persona_name,
-        vault_path,
+        memory_store_path,
         type(llm).__name__ if llm is not None else None,
     )
 
@@ -70,7 +72,7 @@ def build_splitmind_graph(
             max_iterations=max_iterations,
         ),
         state_class=SplitMindAgentState,
-        dependency_provider=lambda contract: _provide_dependencies(contract, persona_name, vault_store),
+        dependency_provider=lambda contract: _provide_dependencies(contract, persona_name, memory_store),
     )
 
     graph.set_entry_point("main_supervisor")
@@ -80,12 +82,12 @@ def build_splitmind_graph(
 def _provide_dependencies(
     contract: Any,
     persona_name: str,
-    vault_store: VaultStore | None,
+    memory_store: MarkdownMemoryStore | None,
 ) -> dict[str, Any]:
     """Provide node-specific dependencies based on the contract."""
     logger.debug("Providing dependencies for node=%s", contract.name)
     if contract.name == "session_bootstrap":
-        return {"persona_name": persona_name, "vault_store": vault_store}
+        return {"persona_name": persona_name, "memory_store": memory_store}
     if contract.name == "memory_commit":
-        return {"vault_store": vault_store}
+        return {"memory_store": memory_store}
     return {}

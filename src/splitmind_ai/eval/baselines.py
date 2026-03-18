@@ -62,7 +62,7 @@ def _create_llm() -> BaseChatModel:
 def build_baseline_graph(
     config: BaselineConfig,
     persona_name: str = "cold_attached_idol",
-    vault_path: str | None = None,
+    memory_store_path: str | None = None,
 ) -> Any:
     """Build a compiled graph for graph-based baselines."""
     if config.kind != "graph":
@@ -72,7 +72,7 @@ def build_baseline_graph(
     return build_splitmind_graph(
         llm=llm,
         persona_name=persona_name,
-        vault_path=vault_path if config.use_vault else None,
+        memory_store_path=memory_store_path if config.use_vault else None,
         max_iterations=settings.runtime.max_iterations,
     )
 

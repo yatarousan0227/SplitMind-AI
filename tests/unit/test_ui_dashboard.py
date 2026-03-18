@@ -98,7 +98,7 @@ def test_build_history_rows_uses_conflict_metrics_for_affect_series():
         {
             "turn": 1,
             "relationship": {"trust": 0.4},
-            "conflict": {"id_intensity": 0.3, "superego_pressure": 0.4, "residue_intensity": 0.2},
+            "conflict": {"id_intensity": 0.3, "superego_pressure": 0.4, "stability": 0.55, "residue_intensity": 0.2},
             "expression": {"directness": 0.6, "closure": 0.1},
             "events": [],
             "timing": {},
@@ -107,7 +107,7 @@ def test_build_history_rows_uses_conflict_metrics_for_affect_series():
         {
             "turn": 2,
             "relationship": {"trust": 0.6},
-            "conflict": {"id_intensity": 0.7, "superego_pressure": 0.5, "residue_intensity": 0.4},
+            "conflict": {"id_intensity": 0.7, "superego_pressure": 0.5, "stability": 0.71, "residue_intensity": 0.4},
             "expression": {"directness": 0.3, "closure": 0.4},
             "events": [],
             "timing": {},
@@ -119,6 +119,11 @@ def test_build_history_rows_uses_conflict_metrics_for_affect_series():
     assert series == [
         {"turn": 1, "metric": "superego_pressure", "value": 0.4},
         {"turn": 2, "metric": "superego_pressure", "value": 0.5},
+    ]
+    ego_series = [row for row in rows["affect"] if row["metric"] == "stability"]
+    assert ego_series == [
+        {"turn": 1, "metric": "stability", "value": 0.55},
+        {"turn": 2, "metric": "stability", "value": 0.71},
     ]
     assert rows["surface"] == [
         {"turn": 1, "metric": "relationship_stage", "value": "unfamiliar"},
@@ -168,6 +173,15 @@ def test_build_current_dashboard_returns_conflict_fidelity_and_expression_rows()
     ])
 
     assert dashboard["conflict_story"].startswith("stay_close is aimed at user")
+    assert [row["key"] for row in dashboard["conflict_profile_rows"]] == [
+        "id_profile",
+        "superego_profile",
+        "ego_profile",
+        "residue_profile",
+        "expression_profile",
+    ]
+    assert dashboard["conflict_profile_rows"][2]["meter_label"] == "Stability"
+    assert dashboard["conflict_profile_rows"][2]["meter_value"] == 0.71
     assert dashboard["conflict_rows"][0]["label"] == "Dominant want"
     assert dashboard["expression_rows"][0]["value"] == "short"
     assert dashboard["pacing_rows"][0]["value"] == "warming"
@@ -180,6 +194,7 @@ def test_build_current_dashboard_empty_state_includes_visual_defaults():
 
     assert dashboard["conflict_story"] == "No active conflict loop yet."
     assert dashboard["story_steps"] == []
+    assert dashboard["conflict_profile_rows"] == []
     assert dashboard["residue_rows"] == []
     assert dashboard["expression_rows"] == []
     assert dashboard["pacing_rows"] == []

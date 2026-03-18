@@ -23,6 +23,11 @@ def test_state_can_hold_new_slices():
         "response": {},
         "persona": {
             "persona_version": 2,
+            "identity": {
+                "self_name": "Airi",
+                "display_name": "Cold Attached Idol",
+            },
+            "gender": "female",
             "psychodynamics": {
                 "drives": {"closeness": 0.72, "status": 0.81},
                 "threat_sensitivity": {"rejection": 0.84},
@@ -81,6 +86,16 @@ def test_state_can_hold_new_slices():
             "confidence": 0.84,
             "cues": [{"label": "apology", "evidence": "ごめん", "intensity": 0.7, "confidence": 0.9}],
             "summary_short": "User offers repair.",
+            "event_mix": {
+                "primary_event": "repair_offer",
+                "secondary_events": ["reassurance"],
+                "comparison_frame": "none",
+                "repair_signal_strength": 0.82,
+                "priority_signal_strength": 0.71,
+                "distance_signal_strength": 0.0,
+            },
+            "speaker_intent": {"user_repair_bid": True},
+            "perspective_guard": {"preserve_user_as_subject": False},
         },
         "conflict_state": {
             "id_impulse": {
@@ -150,6 +165,7 @@ def test_state_can_hold_new_slices():
     assert state["request"]["user_message"] == "hello"
     assert state["relationship_state"]["durable"]["relationship_stage"] == "warming"
     assert state["appraisal"]["event_type"] == "repair_offer"
+    assert state["appraisal"]["event_mix"]["secondary_events"] == ["reassurance"]
     assert state["conflict_state"]["ego_move"]["social_move"] == "accept_but_hold"
     assert state["drive_state"]["top_drives"][0]["name"] == "attachment_closeness"
     assert state["working_memory"]["recent_conflict_summaries"][0]["event_type"] == "repair_offer"

@@ -10,8 +10,8 @@ personas:
   default: irresistibly_sweet_center_heroine
   directory: configs/personas
 
-vault:
-  path: ./vault
+memory_store:
+  path: ./data/memory
   enabled: true
 
 state_update:

@@ -1,4 +1,4 @@
-"""SessionBootstrapNode: initializes next-generation turn state from input and vault."""
+"""SessionBootstrapNode: initializes next-generation turn state from input and markdown memory."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from typing import Any, ClassVar
 from agent_contracts import ModularNode, NodeContract, NodeInputs, NodeOutputs, TriggerCondition
 
 from splitmind_ai.app.logging_utils import preview_text
-from splitmind_ai.memory.vault_store import VaultStore
+from splitmind_ai.memory.markdown_store import MarkdownMemoryStore
 from splitmind_ai.personas.loader import load_persona
 
 logger = logging.getLogger(__name__)
 
-# Defaults when vault has no prior state
+# Defaults when the persistent store has no prior state
 _DEFAULT_RELATIONSHIP_STATE: dict[str, Any] = {
     "durable": {
         "trust": 0.5,
@@ -32,6 +32,7 @@ _DEFAULT_RELATIONSHIP_STATE: dict[str, Any] = {
         "escalation_allowed": False,
         "interaction_fragility": 0.0,
         "turn_local_repair_opening": 0.0,
+        "repair_mode": "closed",
     },
 }
 
@@ -48,15 +49,17 @@ _DEFAULT_MOOD: dict[str, Any] = {
 class SessionBootstrapNode(ModularNode):
     CONTRACT: ClassVar[NodeContract] = NodeContract(
         name="session_bootstrap",
-        description="Normalize session input, load persona and persisted state from vault",
+        description="Normalize session input, load persona and persisted state from markdown memory",
         reads=["request", "_internal"],
         writes=[
             "conversation",
             "persona",
+            "relational_policy",
             "relationship_state",
             "mood",
             "memory",
             "working_memory",
+            "residue_state",
             "drive_state",
             "_internal",
         ],
@@ -75,12 +78,12 @@ class SessionBootstrapNode(ModularNode):
     def __init__(
         self,
         persona_name: str = "cold_attached_idol",
-        vault_store: VaultStore | None = None,
+        memory_store: MarkdownMemoryStore | None = None,
         **services: Any,
     ) -> None:
         super().__init__(**services)
         self._persona_name = persona_name
-        self._vault = vault_store
+        self._memory_store = memory_store
 
     async def execute(self, inputs: NodeInputs, config: Any = None) -> NodeOutputs:
         request = inputs.get_slice("request")
@@ -108,57 +111,54 @@ class SessionBootstrapNode(ModularNode):
 
         turn_number = internal.get("turn_count", 0) + 1
 
-        # Load persisted state from vault (session start only)
+        # Load persisted state from markdown memory (session start only)
         relationship_state = {
             "durable": dict(_DEFAULT_RELATIONSHIP_STATE["durable"]),
             "ephemeral": dict(_DEFAULT_RELATIONSHIP_STATE["ephemeral"]),
         }
         mood = dict(_DEFAULT_MOOD)
         memory: dict[str, Any] = {
+            "relationship_card": {},
+            "psychological_card": {},
+            "episodes": [],
+            "session_digests": [],
             "session_summaries": [],
             "emotional_memories": [],
             "semantic_preferences": [],
         }
 
-        if self._vault is not None:
-            try:
-                vault_rel = self._vault.load_relationship_state(user_id)
-                if vault_rel:
-                    for k, v in vault_rel.items():
-                        if k in relationship_state["durable"]:
-                            relationship_state["durable"][k] = v
-                    logger.info("Loaded relationship state from vault for user=%s", user_id)
-            except Exception:
-                logger.warning("Failed to load relationship from vault", exc_info=True)
-
-            try:
-                vault_mood = self._vault.load_mood(user_id)
-                if vault_mood:
-                    for k, v in vault_mood.items():
-                        if k in mood:
-                            mood[k] = v
-                    logger.info("Loaded mood state from vault for user=%s", user_id)
-            except Exception:
-                logger.warning("Failed to load mood from vault", exc_info=True)
-
+        if self._memory_store is not None:
             try:
                 retrieval_params = _extract_memory_retrieval_params(request)
-                has_targeted_retrieval = any(
-                    value for key, value in retrieval_params.items() if key != "limit"
+                bootstrap = self._memory_store.load_bootstrap_context(
+                    user_id=user_id,
+                    persona_name=self._persona_name,
+                    query_context={
+                        **retrieval_params,
+                        "user_message": user_message,
+                        "current_episode_summary": str(request.get("message", "") or ""),
+                        "unresolved_tension_summary": [],
+                    },
                 )
-                if has_targeted_retrieval:
-                    memory = self._vault.retrieve_relevant_memories(user_id, **retrieval_params)
-                    logger.info("Loaded targeted memory context for user=%s", user_id)
-                else:
-                    memory = self._vault.load_memory_context(user_id)
+                loaded_relationship = dict((bootstrap.get("relationship_state", {}) or {}).get("durable", {}) or {})
+                for key, value in loaded_relationship.items():
+                    if key in relationship_state["durable"]:
+                        relationship_state["durable"][key] = value
+                loaded_mood = dict(bootstrap.get("mood", {}) or {})
+                for key, value in loaded_mood.items():
+                    if key in mood:
+                        mood[key] = value
+                loaded_memory = dict(bootstrap.get("memory", {}) or {})
+                if loaded_memory:
+                    memory.update(loaded_memory)
                 logger.info(
-                    "Loaded memory context: %d sessions, %d emotional, %d preferences",
+                    "Loaded memory context: %d sessions, %d episodes, %d guidance items",
                     len(memory.get("session_summaries", [])),
-                    len(memory.get("emotional_memories", [])),
+                    len(memory.get("episodes", [])),
                     len(memory.get("semantic_preferences", [])),
                 )
             except Exception:
-                logger.warning("Failed to load memory from vault", exc_info=True)
+                logger.warning("Failed to load memory from markdown store", exc_info=True)
 
         # Initialize conversation
         conversation = {
@@ -180,6 +180,7 @@ class SessionBootstrapNode(ModularNode):
             "session": {
                 "session_id": session_id,
                 "persona_name": self._persona_name,
+                "persona_self_name": str(((persona_slice.get("identity") or {}).get("self_name")) or ""),
                 "user_id": user_id,
             },
             "event_flags": {},
@@ -192,10 +193,12 @@ class SessionBootstrapNode(ModularNode):
         return NodeOutputs(
             conversation=conversation,
             persona=persona_slice,
+            relational_policy=dict(persona_slice.get("relational_policy", {}) or {}),
             relationship_state=relationship_state,
             mood=mood,
             memory=memory,
             working_memory=working_memory,
+            residue_state={"active_residues": [], "dominant_residue": "", "overall_load": 0.0, "trigger_links": []},
             drive_state={},
             _internal=internal_update,
         )
@@ -204,6 +207,11 @@ class SessionBootstrapNode(ModularNode):
 def _default_persona_slice(persona_name: str) -> dict[str, Any]:
     return {
         "persona_version": 2,
+        "identity": {
+            "self_name": persona_name,
+            "display_name": persona_name.replace("_", " "),
+        },
+        "gender": "other",
         "psychodynamics": {
             "drives": {},
             "threat_sensitivity": {},
@@ -234,6 +242,15 @@ def _default_persona_slice(persona_name: str) -> dict[str, Any]:
         "safety_boundary": {
             "hard_limits": {},
         },
+        "relational_policy": {
+            "repair_style": "guarded",
+            "comparison_style": "withhold",
+            "distance_management_style": "respect_space",
+            "status_maintenance_style": "medium",
+            "warmth_release_style": "measured",
+            "priority_response_style": "implicit",
+            "residue_persistence": {},
+        },
     }
 
 
@@ -246,12 +263,21 @@ def _extract_memory_retrieval_params(request: dict[str, Any]) -> dict[str, Any]:
         "target": params.get("memory_target"),
         "blocked_action": params.get("memory_blocked_action"),
         "topic": params.get("memory_topic"),
+        "active_themes": params.get("active_themes", []),
         "limit": params.get("memory_limit", 3),
     }
 
 
 def _derive_active_themes(memory: dict[str, Any]) -> list[str]:
     themes: list[str] = []
+    for item in memory.get("episodes", []):
+        for value in item.get("themes", []) or []:
+            if value and value not in themes:
+                themes.append(value)
+    psychological_card = dict(memory.get("psychological_card", {}) or {})
+    for value in psychological_card.get("active_themes", []) or []:
+        if value and value not in themes:
+            themes.append(value)
     for item in memory.get("emotional_memories", []):
         trigger = item.get("trigger")
         target = item.get("target")
@@ -267,6 +293,13 @@ def _derive_active_themes(memory: dict[str, Any]) -> list[str]:
 
 def _derive_retrieved_memory_ids(memory: dict[str, Any]) -> list[str]:
     ids: list[str] = []
+    for item in memory.get("episodes", []):
+        item_id = item.get("id")
+        session_id = item.get("session_id")
+        if item_id:
+            ids.append(str(item_id))
+        elif session_id:
+            ids.append(str(session_id))
     for item in memory.get("emotional_memories", []):
         session_id = item.get("session_id")
         turn_number = item.get("turn_number")

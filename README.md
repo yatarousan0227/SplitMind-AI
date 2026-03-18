@@ -8,16 +8,17 @@ Instead of driving every reply from a single persona prompt, SplitMind-AI separa
 
 ```text
 User Input
-  -> Internal Dynamics (Id / Ego / Superego / Defense)
-  -> Motivational / Appraisal / Action Arbitration
-  -> Surface State + Persona Frame
-  -> Candidate Planning + Critic
-  -> Surface Realization
-  -> Response + State Update + Memory Commit
+  -> Session Bootstrap
+  -> Appraisal
+  -> Conflict Engine
+  -> Expression Realizer
+  -> Fidelity Gate
+  -> Memory Interpreter
+  -> Response + State Update + Persistent Memory Commit
 ```
 
-Current default runtime: `3` LLM calls per turn.
-`InternalDynamicsNode` builds structured internal pressure, `PersonaSupervisorNode` builds the frame, and `SurfaceRealizationNode` writes/selects final text after `SelectionCriticNode` reranks candidates.
+Current default runtime: `5` LLM calls per turn.
+`AppraisalNode`, `ConflictEngineNode`, `ExpressionRealizerNode`, `FidelityGateNode`, and `MemoryInterpreterNode` build the turn before `MemoryCommitNode` merges state and writes persistent memory.
 
 ## UI Preview
 
@@ -76,7 +77,8 @@ The point is not just the final line. The runtime keeps the pressure, defense, a
 ## What You Can Explore Today
 
 - A Streamlit research UI for chatting and inspecting traces turn by turn
-- Persistent vault-backed memory with durable and ephemeral relationship state
+- Markdown-backed persistent memory scoped by `user_id x persona_name`
+- Persona configs with `identity.self_name` for stable self-recognition
 - Contract-driven runtime nodes with typed Pydantic schemas
 - Scenario evaluation and reporting pipeline for qualitative checks
 - Safety layers for prohibited patterns, output linting, and moderation checks
@@ -90,7 +92,7 @@ The point is not just the final line. The runtime keeps the pressure, defense, a
 | `state/` | Typed slices for persona, relationship state, mood, appraisal, conflict, and trace state |
 | `nodes/` | Modular runtime stages for bootstrap, appraisal, conflict, realization, fidelity, and persistence |
 | `rules/` | Rule-based state transitions and safety boundaries |
-| `memory/` | Obsidian-style vault persistence |
+| `memory/` | Frontmatter-backed markdown persistent memory |
 | `eval/` | Datasets, baselines, reporting, and observability |
 | `ui/` | Streamlit research interface and dashboard |
 
@@ -174,6 +176,8 @@ uv run python -m splitmind_ai.eval.reporting \
 
 Persona configs live in `configs/personas/`.
 
+Each persona now includes `identity.self_name` and `identity.display_name`, so the system can keep a stable internal sense of self without turning that into forced self-introduction on every turn.
+
 - `cold_attached_idol`
   Cold exterior, warm interior, with ironic deflection as the primary defense.
 - `warm_guarded_companion`
@@ -207,8 +211,9 @@ Three layers are enforced in code:
 ## Current Status
 
 - The next-generation conflict-engine runtime is active.
-- The default turn pipeline is `session_bootstrap -> appraisal -> conflict_engine -> expression_realizer -> fidelity_gate -> memory_commit`.
-- Persona configs use the theory-first v2 schema centered on psychodynamics, relational profile, defense organization, ego organization, and safety boundary.
+- The default turn pipeline is `session_bootstrap -> appraisal -> conflict_engine -> expression_realizer -> fidelity_gate -> memory_interpreter -> memory_commit`.
+- Persona configs use the theory-first v2 schema centered on `identity`, psychodynamics, relational profile, defense organization, ego organization, and safety boundary.
+- Persistent memory now uses markdown cards and digests under `data/memory/<user_id>/<persona_name>/`.
 - The UI and dashboard now expose `relationship_state`, `appraisal`, `conflict_state`, `expression`, and `fidelity`.
 - Current verification baseline: `uv run pytest tests/unit -q`
 
@@ -225,6 +230,7 @@ Longer references:
 
 - [docs/concept.en.md](./docs/concept.en.md)
 - [docs/implementation-plan/README.en.md](./docs/implementation-plan/README.en.md)
+- [docs/implementation-plan/15-persona-identity-and-persistent-memory.md](./docs/implementation-plan/15-persona-identity-and-persistent-memory.md)
 - [docs/eval/phase9-qualitative-qa.md](./docs/eval/phase9-qualitative-qa.md)
 
 ## Contributing And OSS Docs

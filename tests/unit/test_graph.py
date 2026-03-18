@@ -19,6 +19,7 @@ def test_register_all_nodes():
         "session_bootstrap",
         "appraisal",
         "conflict_engine",
+        "turn_shaping_policy",
         "expression_realizer",
         "fidelity_gate",
         "memory_interpreter",
@@ -63,6 +64,13 @@ def test_contract_reads_writes_consistency():
     assert "conversation" in c.reads
     assert "conflict_state" in c.writes
     assert c.requires_llm is True
+
+    c = registry.get_contract("turn_shaping_policy")
+    assert "appraisal" in c.reads
+    assert "conflict_state" in c.reads
+    assert "turn_shaping_policy" in c.writes
+    assert "repair_policy" in c.writes
+    assert "comparison_policy" in c.writes
 
     c = registry.get_contract("expression_realizer")
     assert "conflict_state" in c.reads
@@ -154,13 +162,27 @@ def test_trigger_progression_matches_new_pipeline():
 
     after_conflict = {
         **after_appraisal,
-        "conflict_state": {"ego_move": {"social_move": "receive_without_chasing"}},
+        "conflict_state": {"ego_move": {"move_family": "affection_receipt", "move_style": "defer_without_chasing"}},
     }
     matches = registry.evaluate_triggers("main", after_conflict)
+    assert [m.node_name for m in matches] == ["turn_shaping_policy"]
+
+    after_policy = {
+        **after_conflict,
+        "turn_shaping_policy": {"primary_frame": "affection_receipt"},
+        "repair_policy": {"repair_mode": "closed"},
+        "comparison_policy": {"comparison_threat_level": 0.0},
+        "trace": {
+            "turn_shaping_policy": {"primary_frame": "affection_receipt"},
+            "repair_policy": {"repair_mode": "closed"},
+            "comparison_policy": {"comparison_threat_level": 0.0},
+        },
+    }
+    matches = registry.evaluate_triggers("main", after_policy)
     assert [m.node_name for m in matches] == ["expression_realizer"]
 
     after_response = {
-        **after_conflict,
+        **after_policy,
         "response": {"final_response_text": "...うん。"},
     }
     matches = registry.evaluate_triggers("main", after_response)
@@ -168,7 +190,12 @@ def test_trigger_progression_matches_new_pipeline():
 
     after_gate = {
         **after_response,
-        "trace": {"fidelity_gate": {"passed": True}},
+        "trace": {
+            "turn_shaping_policy": {"primary_frame": "affection_receipt"},
+            "repair_policy": {"repair_mode": "closed"},
+            "comparison_policy": {"comparison_threat_level": 0.0},
+            "fidelity_gate": {"passed": True},
+        },
     }
     matches = registry.evaluate_triggers("main", after_gate)
     assert [m.node_name for m in matches] == ["memory_interpreter"]
@@ -176,6 +203,9 @@ def test_trigger_progression_matches_new_pipeline():
     after_memory_interpreter = {
         **after_gate,
         "trace": {
+            "turn_shaping_policy": {"primary_frame": "affection_receipt"},
+            "repair_policy": {"repair_mode": "closed"},
+            "comparison_policy": {"comparison_threat_level": 0.0},
             "fidelity_gate": {"passed": True},
             "memory_interpreter": {"used_llm": True},
         },

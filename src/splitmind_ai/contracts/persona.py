@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -9,6 +11,13 @@ class StrictContractModel(BaseModel):
     """Base model for strict schema contracts."""
 
     model_config = ConfigDict(extra="forbid")
+
+
+class Identity(StrictContractModel):
+    """Human-facing identity information for the persona."""
+
+    self_name: str
+    display_name: str | None = None
 
 
 class Psychodynamics(StrictContractModel):
@@ -56,12 +65,27 @@ class SafetyBoundary(StrictContractModel):
     hard_limits: dict[str, float] = Field(default_factory=dict)
 
 
+class RelationalPolicy(StrictContractModel):
+    """Persona-specific relational negotiation policy."""
+
+    repair_style: str = Field(default="guarded")
+    comparison_style: str = Field(default="withhold")
+    distance_management_style: str = Field(default="respect_space")
+    status_maintenance_style: str = Field(default="medium")
+    warmth_release_style: str = Field(default="measured")
+    priority_response_style: str = Field(default="implicit")
+    residue_persistence: dict[str, float] = Field(default_factory=dict)
+
+
 class PersonaProfile(StrictContractModel):
     """Complete persona contract for the conflict-engine architecture."""
 
     persona_version: int = Field(default=2)
+    identity: Identity
+    gender: Literal["male", "female", "other"]
     psychodynamics: Psychodynamics
     relational_profile: RelationalProfile
     defense_organization: DefenseOrganization
     ego_organization: EgoOrganization
     safety_boundary: SafetyBoundary
+    relational_policy: RelationalPolicy = Field(default_factory=RelationalPolicy)

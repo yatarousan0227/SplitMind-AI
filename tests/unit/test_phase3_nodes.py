@@ -122,3 +122,113 @@ async def test_memory_commit_updates_relationship_state_and_working_memory():
     assert state["working_memory"]["recent_conflict_summaries"][0]["ego_move"] == "accept_but_hold"
     assert state["trace"]["memory_commit"]["used_memory_interpretation"] is True
     assert state["trace"]["memory_commit"]["memory_commit_ms"] >= 0.0
+
+
+@pytest.mark.asyncio
+async def test_memory_commit_ignores_non_string_topics_and_themes():
+    node = MemoryCommitNode()
+    inputs = NodeInputs(
+        request={"user_message": "hi"},
+        response={"final_response_text": "ok"},
+        relationship_state={
+            "durable": {"unresolved_tension_summary": [{"bad": "value"}, "old tension"]},
+            "ephemeral": {},
+        },
+        mood={},
+        memory={"session_summaries": [], "emotional_memories": [], "semantic_preferences": []},
+        working_memory={
+            "active_themes": [{"label": "repair"}, "trust"],
+            "salient_user_phrases": [],
+            "recent_conflict_summaries": [],
+        },
+        appraisal={"event_type": "neutral", "target_of_tension": ""},
+        conflict_state={
+            "id_impulse": {"dominant_want": "move_closer", "intensity": 0.5},
+            "residue": {"visible_emotion": "softened", "intensity": 0.2},
+            "ego_move": {"move_style": "accept"},
+        },
+        drive_state={"top_drives": [{"name": "attachment", "target": "user"}]},
+        memory_interpretation={
+            "event_flags": {},
+            "active_themes": [],
+            "emotional_memories": [],
+            "semantic_preferences": [
+                {"topic": {"bad": "value"}, "preference": "ignore"},
+                {"topic": "affectionate_context", "preference": "keep"},
+            ],
+        },
+        _internal={"session": {}, "turn_count": 0},
+    )
+
+    outputs = await node.execute(inputs)
+    state = outputs.to_state_updates()
+
+    assert all(isinstance(theme, str) for theme in state["working_memory"]["active_themes"])
+    assert "{'bad': 'value'}" not in state["working_memory"]["active_themes"]
+    assert [item["topic"] for item in state["memory"]["semantic_preferences"]] == [
+        "affectionate_context"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_memory_commit_skips_malformed_memory_candidate_pairs():
+    node = MemoryCommitNode()
+    inputs = NodeInputs(
+        request={"user_message": "hi"},
+        response={"final_response_text": "ok"},
+        relationship_state={"durable": {}, "ephemeral": {}},
+        mood={},
+        memory={"session_summaries": [], "emotional_memories": [], "semantic_preferences": []},
+        working_memory={"active_themes": [], "salient_user_phrases": [], "recent_conflict_summaries": []},
+        appraisal={"event_type": "neutral", "target_of_tension": ""},
+        conflict_state={
+            "id_impulse": {"dominant_want": "move_closer", "intensity": 0.5},
+            "residue": {"visible_emotion": "softened", "intensity": 0.2},
+            "ego_move": {"move_style": "accept"},
+        },
+        drive_state={"top_drives": [{"name": "attachment", "target": "user"}]},
+        memory_interpretation={
+            "event_flags": {},
+            "active_themes": [],
+            "emotional_memories": [],
+            "semantic_preferences": [[{"bad": "key"}, "ignore"]],
+        },
+        _internal={"session": {}, "turn_count": 0},
+    )
+
+    outputs = await node.execute(inputs)
+    state = outputs.to_state_updates()
+
+    assert state["memory"]["semantic_preferences"] == []
+    assert all(isinstance(theme, str) for theme in state["working_memory"]["active_themes"])
+
+
+@pytest.mark.asyncio
+async def test_memory_commit_logs_debug_context_on_failure(monkeypatch, caplog):
+    def boom(*args, **kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("splitmind_ai.nodes.memory_commit.run_full_update", boom)
+
+    node = MemoryCommitNode()
+    inputs = NodeInputs(
+        request={"user_message": "hi"},
+        response={"final_response_text": "ok"},
+        relationship_state={"durable": {}, "ephemeral": {}},
+        mood={},
+        memory={"session_summaries": [], "emotional_memories": [], "semantic_preferences": []},
+        working_memory={"active_themes": [], "salient_user_phrases": [], "recent_conflict_summaries": []},
+        appraisal={"event_type": "neutral", "target_of_tension": ""},
+        conflict_state={"id_impulse": {"dominant_want": "move_closer", "intensity": 0.5}},
+        drive_state={"top_drives": []},
+        memory_interpretation={"event_flags": {}, "active_themes": []},
+        _internal={"session": {"session_id": "s1"}, "turn_count": 3},
+    )
+
+    with caplog.at_level("WARNING"):
+        with pytest.raises(RuntimeError, match="boom"):
+            await node.execute(inputs)
+
+    warning_lines = "\n".join(record.message for record in caplog.records if record.levelname == "WARNING")
+    assert "memory_commit failed debug=" in warning_lines
+    assert "session_id" in warning_lines

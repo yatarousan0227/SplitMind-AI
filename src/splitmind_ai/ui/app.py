@@ -24,6 +24,7 @@ from splitmind_ai.app.language import detect_response_language, normalize_respon
 from splitmind_ai.app.logging_utils import configure_logging, preview_text
 from splitmind_ai.app.llm import create_chat_llm
 from splitmind_ai.app.settings import PROJECT_ROOT, get_default_persona, load_settings
+from splitmind_ai.memory.markdown_store import MarkdownMemoryStore
 from splitmind_ai.personas.loader import list_personas
 from splitmind_ai.ui.dashboard import build_current_dashboard, build_history_rows, build_turn_snapshot
 
@@ -35,7 +36,7 @@ UI_TEXT = {
         "sidebar_title": "SplitMind-AI Research",
         "persona": "Persona",
         "show_trace": "Show trace",
-        "vault_persistence": "Vault persistence",
+        "persistent_memory": "Persistent memory",
         "response_language": "Response language",
         "ui_language": "UI language",
         "auto": "Auto",
@@ -91,6 +92,7 @@ UI_TEXT = {
         "current_turn_read": "Current Turn Read",
         "no_drive_flow": "No drive flow available yet.",
         "no_residue_profile": "No residue profile available.",
+        "no_conflict_profile": "No conflict profile available.",
         "active_themes": "Active themes",
         "fidelity_warnings": "Fidelity warnings",
         "source": "Source",
@@ -123,7 +125,7 @@ UI_TEXT = {
         "sidebar_title": "SplitMind-AI Research",
         "persona": "ペルソナ",
         "show_trace": "トレースを表示",
-        "vault_persistence": "Vault を保持",
+        "persistent_memory": "永続メモリを保持",
         "response_language": "応答言語",
         "ui_language": "表示言語",
         "auto": "自動",
@@ -179,6 +181,7 @@ UI_TEXT = {
         "current_turn_read": "現在ターンの読み取り",
         "no_drive_flow": "まだドライブフローはありません。",
         "no_residue_profile": "残滓プロファイルはまだありません。",
+        "no_conflict_profile": "対立プロファイルはまだありません。",
         "active_themes": "アクティブテーマ",
         "fidelity_warnings": "忠実性の警告",
         "source": "ソース",
@@ -212,6 +215,8 @@ FIELD_LABELS = {
     "length": "Length",
     "temperature": "Temperature",
     "directness": "Directness",
+    "stability": "Ego stability",
+    "move_style": "Move Style",
     "relationship_stage": "Stage",
     "commitment_readiness": "Readiness",
     "repair_depth": "Repair depth",
@@ -237,6 +242,8 @@ LABEL_TRANSLATIONS = {
         "Length": "長さ",
         "Temperature": "温度感",
         "Directness": "直接性",
+        "Ego stability": "エゴ安定度",
+        "Move Style": "エゴの動き",
         "Stage": "段階",
         "Readiness": "準備度",
         "Repair depth": "修復の深さ",
@@ -254,16 +261,24 @@ LABEL_TRANSLATIONS = {
         "Target tension": "テンション対象",
         "Expression temp": "表現温度",
         "Fidelity": "忠実性",
+        "Id": "イド",
         "Id Intensity": "イドの強さ",
         "Superego Pressure": "超自我の圧力",
         "Residue Intensity": "残滓の強さ",
         "Closure": "終止感",
+        "Stability": "安定度",
         "Appraisal": "評価",
         "Tension": "テンション",
         "Superego": "超自我",
         "Ego Move": "エゴの動き",
         "Expression": "表現",
         "Relationship": "関係性",
+        "Target": "ターゲット",
+        "Forbidden moves": "禁止された動き",
+        "Protecting": "保護対象",
+        "Family": "ファミリー",
+        "Compromise": "折衷",
+        "Leak channel": "漏れ方",
     }
 }
 
@@ -356,6 +371,11 @@ def _row_label(row: dict[str, Any], ui_language: str) -> str:
     return _translate_label(base, ui_language)
 
 
+def _metric_label(metric: str, ui_language: str) -> str:
+    base = FIELD_LABELS.get(metric, metric.replace("_", " ").title())
+    return _translate_label(base, ui_language)
+
+
 def _format_row_value(value: Any, ui_language: str, *, key: str = "") -> str:
     if key in {"directness", "commitment_readiness", "repair_depth", "move_fidelity"}:
         try:
@@ -411,6 +431,10 @@ def _init_session_state(
         target["latest_state"] = {}
     if "turn_snapshots" not in target:
         target["turn_snapshots"] = []
+    if "initial_relationship" not in target:
+        target["initial_relationship"] = {}
+    if "session_event_log" not in target:
+        target["session_event_log"] = []
     if "user_id" not in target:
         target["user_id"] = startup_user_id or "default"
     if "response_language" not in target:
@@ -427,13 +451,57 @@ def _reset_session_state(session_state: MutableMapping[str, Any] | None = None) 
     target["traces"] = []
     target["latest_state"] = {}
     target["turn_snapshots"] = []
+    target["initial_relationship"] = {}
+    target["session_event_log"] = []
+
+
+def _persist_session_digest(
+    *,
+    session_state: MutableMapping[str, Any] | None,
+    persona_name: str,
+    memory_store_path: str | None,
+) -> None:
+    """Persist a session digest for the current Streamlit session state."""
+    if not memory_store_path:
+        return
+
+    target = session_state if session_state is not None else st.session_state
+    if int(target.get("turn_count", 0) or 0) <= 0:
+        return
+    latest_state = dict(target.get("latest_state", {}) or {})
+    if not latest_state:
+        return
+
+    from splitmind_ai.app.runtime import _build_session_summary
+
+    memory_store = MarkdownMemoryStore(memory_store_path)
+    summary = _build_session_summary(
+        messages=list(target.get("messages", []) or []),
+        turn_count=int(target.get("turn_count", 0) or 0),
+        initial_relationship=dict(target.get("initial_relationship", {}) or {}),
+        final_state=latest_state,
+        event_log=list(target.get("session_event_log", []) or []),
+    )
+    summary_payload = {
+        "text": summary["text"],
+        "turn_count": int(target.get("turn_count", 0) or 0),
+        "dominant_mood": latest_state.get("mood", {}).get("base_mood", "calm"),
+        "key_events": summary["key_events"],
+    }
+    memory_store.commit_session(
+        user_id=str(target.get("user_id", "default")),
+        persona_name=persona_name,
+        session_id=str(target.get("session_id", "")),
+        session_digest=summary_payload,
+        final_state=latest_state,
+    )
 
 
 # ---------------------------------------------------------------------------
 # Core execution
 # ---------------------------------------------------------------------------
 
-def _runtime_cache_key(settings: Any, persona_name: str, vault_path: str | None) -> tuple[Any, ...]:
+def _runtime_cache_key(settings: Any, persona_name: str, memory_store_path: str | None) -> tuple[Any, ...]:
     """Build a stable key for reusing the compiled graph and LLM in Streamlit."""
     runtime = getattr(settings, "runtime", None)
     return (
@@ -443,7 +511,7 @@ def _runtime_cache_key(settings: Any, persona_name: str, vault_path: str | None)
         settings.llm.api_version,
         getattr(runtime, "max_iterations", None),
         persona_name,
-        str(Path(vault_path).resolve()) if vault_path else None,
+        str(Path(memory_store_path).resolve()) if memory_store_path else None,
     )
 
 
@@ -452,13 +520,13 @@ def _get_or_create_runtime(
     session_state: MutableMapping[str, Any] | None,
     settings: Any,
     persona_name: str,
-    vault_path: str | None,
+    memory_store_path: str | None,
 ) -> Any:
     """Reuse the compiled graph within the Streamlit session when config is unchanged."""
     from splitmind_ai.app.graph import build_splitmind_graph
 
     target = session_state if session_state is not None else st.session_state
-    cache_key = _runtime_cache_key(settings, persona_name, vault_path)
+    cache_key = _runtime_cache_key(settings, persona_name, memory_store_path)
     cached = target.get("_runtime_cache")
 
     if isinstance(cached, dict) and cached.get("cache_key") == cache_key:
@@ -468,7 +536,7 @@ def _get_or_create_runtime(
     compiled = build_splitmind_graph(
         llm=llm,
         persona_name=persona_name,
-        vault_path=vault_path,
+        memory_store_path=memory_store_path,
         max_iterations=getattr(getattr(settings, "runtime", None), "max_iterations", None),
     )
     target["_runtime_cache"] = {
@@ -480,7 +548,7 @@ def _get_or_create_runtime(
 def _run_turn(
     user_message: str,
     persona_name: str,
-    vault_path: str | None,
+    memory_store_path: str | None,
     user_id: str,
     response_language: str | None,
 ) -> dict[str, Any]:
@@ -491,7 +559,7 @@ def _run_turn(
         session_state=st.session_state,
         settings=settings,
         persona_name=persona_name,
-        vault_path=vault_path,
+        memory_store_path=memory_store_path,
     )
 
     state = _build_turn_state(
@@ -556,10 +624,12 @@ def _build_turn_state(
 
     for slice_name in (
         "persona",
+        "relational_policy",
         "relationship_state",
         "mood",
         "memory",
         "working_memory",
+        "residue_state",
     ):
         slice_value = latest_state.get(slice_name)
         if isinstance(slice_value, dict):
@@ -594,7 +664,7 @@ def _build_turn_state(
 # ---------------------------------------------------------------------------
 
 def _render_sidebar() -> tuple[str, bool, str | None, str, str]:
-    """Render sidebar controls and return persona, trace mode, vault path, and language modes."""
+    """Render sidebar controls and return persona, trace mode, memory path, and language modes."""
     ui_language = st.session_state.get("ui_language", _resolve_default_ui_language())
     st.sidebar.title(_t(ui_language, "sidebar_title"))
 
@@ -608,12 +678,14 @@ def _render_sidebar() -> tuple[str, bool, str | None, str, str]:
     # Trace mode
     trace_mode = st.sidebar.toggle(_t(ui_language, "show_trace"), value=True)
 
-    # Vault
-    vault_enabled = st.sidebar.toggle(
-        _t(ui_language, "vault_persistence"),
-        value=settings.vault.enabled,
+    # Persistent memory
+    memory_enabled = st.sidebar.toggle(
+        _t(ui_language, "persistent_memory"),
+        value=settings.memory_store.enabled,
     )
-    vault_path = str((PROJECT_ROOT / settings.vault.path).resolve()) if vault_enabled else None
+    memory_store_path = (
+        str((PROJECT_ROOT / settings.memory_store.path).resolve()) if memory_enabled else None
+    )
 
     language_options = {
         _t(ui_language, "auto"): "auto",
@@ -648,6 +720,11 @@ def _render_sidebar() -> tuple[str, bool, str | None, str, str]:
 
     # Reset session
     if st.sidebar.button(_t(ui_language, "reset_session")):
+        _persist_session_digest(
+            session_state=st.session_state,
+            persona_name=persona_name,
+            memory_store_path=memory_store_path,
+        )
         _reset_session_state()
         st.rerun()
 
@@ -660,7 +737,7 @@ def _render_sidebar() -> tuple[str, bool, str | None, str, str]:
     return (
         persona_name,
         trace_mode,
-        vault_path,
+        memory_store_path,
         st.session_state["response_language"],
         ui_language,
     )
@@ -705,9 +782,9 @@ def _render_state_panel(state: dict[str, Any], ui_language: str) -> None:
     else:
         st.sidebar.caption(f"{_t(ui_language, 'dominant_want')}: {_t(ui_language, 'none')}")
 
-    social_move = ((conflict_state.get("ego_move") or {}).get("social_move"))
-    if social_move:
-        st.sidebar.caption(f"{_t(ui_language, 'ego_move')}: {_humanize_code(social_move, ui_language)}")
+    move_style = ((conflict_state.get("ego_move") or {}).get("move_style"))
+    if move_style:
+        st.sidebar.caption(f"{_t(ui_language, 'ego_move')}: {_humanize_code(move_style, ui_language)}")
     if appraisal.get("event_type"):
         st.sidebar.caption(
             f"{_t(ui_language, 'event')}: {_humanize_code(appraisal.get('event_type'), ui_language)}"
@@ -905,6 +982,46 @@ def _inject_dashboard_styles() -> None:
             color: #7f6a53;
             margin: 0 0 0.45rem 0;
         }
+        .sm-surface-board {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+        .sm-surface-card {
+            padding: 0.95rem 1rem;
+            border-radius: 18px;
+            background: linear-gradient(180deg, #fffdf9 0%, #f7efe6 100%);
+            border: 1px solid rgba(18, 53, 91, 0.08);
+            box-shadow: 0 8px 20px rgba(18, 53, 91, 0.05);
+            min-width: 0;
+        }
+        .sm-surface-turn {
+            font-size: 0.76rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #7f6a53;
+            margin-bottom: 0.55rem;
+        }
+        .sm-surface-list {
+            display: grid;
+            gap: 0.65rem;
+        }
+        .sm-surface-item {
+            min-width: 0;
+        }
+        .sm-surface-key {
+            font-size: 0.72rem;
+            color: #7f6a53;
+            margin-bottom: 0.18rem;
+        }
+        .sm-surface-value {
+            font-size: 0.95rem;
+            line-height: 1.35;
+            color: #12355b;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
         @media (max-width: 1100px) {
             .sm-mini-grid {
                 grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
@@ -1000,44 +1117,138 @@ def _render_story_flow(
     st.markdown(f'<div class="sm-flow">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
-def _render_pressure_panel(residue_rows: list[dict[str, Any]], ui_language: str) -> None:
-    if not residue_rows:
-        st.caption(_t(ui_language, "no_residue_profile"))
+def _join_humanized(values: list[str], ui_language: str) -> str:
+    return " / ".join(_humanize_code(value, ui_language) for value in values if str(value).strip())
+
+
+def _format_conflict_profile_note(row: dict[str, Any], ui_language: str) -> str:
+    key = str(row.get("key") or "")
+    if key == "id_profile":
+        target = str(row.get("target") or "")
+        if target:
+            return f"{_translate_label('Target', ui_language)}: {_humanize_code(target, ui_language)}"
+        return ""
+
+    if key == "superego_profile":
+        parts: list[str] = []
+        blocked = list(row.get("forbidden_moves", []) or [])
+        if blocked:
+            parts.append(
+                f"{_translate_label('Forbidden moves', ui_language)}: {_join_humanized(blocked, ui_language)}"
+            )
+        self_image = str(row.get("self_image_to_protect") or "")
+        if self_image:
+            parts.append(
+                f"{_translate_label('Protecting', ui_language)}: {_humanize_code(self_image, ui_language)}"
+            )
+        return " · ".join(parts)
+
+    if key == "ego_profile":
+        parts: list[str] = []
+        move_family = str(row.get("move_family") or "")
+        if move_family:
+            parts.append(
+                f"{_translate_label('Family', ui_language)}: {_humanize_code(move_family, ui_language)}"
+            )
+        compromise = str(row.get("dominant_compromise") or "")
+        if compromise:
+            parts.append(
+                f"{_translate_label('Compromise', ui_language)}: {_humanize_code(compromise, ui_language)}"
+            )
+        return " · ".join(parts)
+
+    if key == "residue_profile":
+        leak_channel = str(row.get("leak_channel") or "")
+        if leak_channel:
+            return f"{_translate_label('Leak channel', ui_language)}: {_humanize_code(leak_channel, ui_language)}"
+        return ""
+
+    if key == "expression_profile":
+        parts: list[str] = []
+        length = str(row.get("length") or "")
+        if length:
+            parts.append(f"{_translate_label('Length', ui_language)}: {_humanize_code(length, ui_language)}")
+        parts.append(f"{_translate_label('Closure', ui_language)}: {float(row.get('closure', 0.0)):.2f}")
+        return " · ".join(parts)
+
+    return ""
+
+
+def _surface_timeline_by_turn(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        turn = int(row.get("turn", 0) or 0)
+        metric = str(row.get("metric") or "").strip()
+        value = str(row.get("value") or "").strip()
+        if not turn or not metric or not value:
+            continue
+        bucket = grouped.setdefault(turn, {"turn": turn, "states": {}})
+        bucket["states"][metric] = value
+    return [grouped[turn] for turn in sorted(grouped)]
+
+
+def _render_conflict_profile_panel(profile_rows: list[dict[str, Any]], ui_language: str) -> None:
+    if not profile_rows:
+        st.caption(_t(ui_language, "no_conflict_profile"))
         return
 
-    notes = {
-        "en": {
-            "id_intensity": "How much drive is active right now.",
-            "superego_pressure": "How much pressure is being held back.",
-            "residue_intensity": "How much this turn carries forward.",
-            "directness": "How directly the response can move.",
-            "closure": "How complete the response is allowed to feel.",
-        },
-        "ja": {
-            "id_intensity": "いまどれだけ欲求が動いているか。",
-            "superego_pressure": "どれだけ抑制圧がかかっているか。",
-            "residue_intensity": "このターンにどれだけ残滓が残るか。",
-            "directness": "どれだけ直接的に動けるか。",
-            "closure": "どれだけ言い切れるか。",
-        },
-    }
-    parts = []
-    for row in residue_rows:
+    cards = []
+    for row in profile_rows:
+        meter_value = float(row.get("meter_value", 0.0))
         color = _meter_color(str(row.get("tone", "")))
-        value = float(row.get("value", 0.0))
-        parts.append(
+        note = _format_conflict_profile_note(row, ui_language)
+        cards.append(
+            '<div class="sm-detail-card">'
+            f'<div class="sm-detail-label">{_safe_html(_translate_label(str(row.get("label", "")), ui_language))}</div>'
+            f'<div class="sm-detail-value">{_safe_html(_humanize_code(row.get("value"), ui_language))}</div>'
             '<div class="sm-meter">'
             '<div class="sm-meter-header">'
-            f'<span>{_safe_html(_translate_label(row.get("label", ""), ui_language))}</span>'
-            f"<strong>{value:.2f}</strong>"
+            f'<span>{_safe_html(_translate_label(str(row.get("meter_label", "")), ui_language))}</span>'
+            f"<strong>{meter_value:.2f}</strong>"
             "</div>"
             '<div class="sm-meter-track">'
-            f'<div class="sm-meter-fill" style="width:{value * 100:.0f}%;background:{color};"></div>'
+            f'<div class="sm-meter-fill" style="width:{meter_value * 100:.0f}%;background:{color};"></div>'
             "</div>"
-            f'<div class="sm-meter-note">{_safe_html(notes[ui_language].get(row.get("key", ""), ""))}</div>'
+            "</div>"
+            f'<div class="sm-detail-meta">{_safe_html(note)}</div>'
             "</div>"
         )
-    st.markdown("".join(parts), unsafe_allow_html=True)
+    st.markdown(f'<div class="sm-mini-grid">{"".join(cards)}</div>', unsafe_allow_html=True)
+
+
+def _render_surface_timeline(rows: list[dict[str, Any]], ui_language: str) -> None:
+    grouped_rows = _surface_timeline_by_turn(rows)
+    if not grouped_rows:
+        st.caption(_t(ui_language, "none"))
+        return
+
+    cards = []
+    for item in grouped_rows:
+        states = item.get("states", {}) or {}
+        state_items = []
+        for metric in ("move_style", "relationship_stage"):
+            value = str(states.get(metric) or "").strip()
+            if not value:
+                continue
+            state_items.append(
+                '<div class="sm-surface-item">'
+                f'<div class="sm-surface-key">{_safe_html(_metric_label(metric, ui_language))}</div>'
+                f'<div class="sm-surface-value">{_safe_html(_humanize_code(value, ui_language))}</div>'
+                "</div>"
+            )
+        if not state_items:
+            continue
+        cards.append(
+            '<div class="sm-surface-card">'
+            f'<div class="sm-surface-turn">{_safe_html(_t(ui_language, "turn_label", turn=item["turn"]))}</div>'
+            f'<div class="sm-surface-list">{"".join(state_items)}</div>'
+            "</div>"
+        )
+
+    if not cards:
+        st.caption(_t(ui_language, "none"))
+        return
+    st.markdown(f'<div class="sm-surface-board">{"".join(cards)}</div>', unsafe_allow_html=True)
 
 
 def _render_drive_stack(drive_rows: list[dict[str, Any]]) -> None:
@@ -1079,7 +1290,7 @@ def _render_surface_panel(
     cards = [
         (_translate_label("Event type", ui_language), appraisal.get("event_type") or "unknown"),
         (_translate_label("Target tension", ui_language), appraisal.get("target_of_tension") or "unknown"),
-        (_t(ui_language, "ego_move"), conflict.get("social_move") or "contained"),
+        (_t(ui_language, "ego_move"), conflict.get("move_style") or "contained"),
         (_translate_label("Residue", ui_language), conflict.get("visible_emotion") or "contained"),
         (_translate_label("Relationship", ui_language), pacing.get("relationship_stage") or "untracked"),
         (_translate_label("Expression temp", ui_language), expression.get("temperature") or "unknown"),
@@ -1121,6 +1332,7 @@ def _meter_color(tone: str) -> str:
         "carry": "linear-gradient(90deg, #3c6e71 0%, #12355b 100%)",
         "block": "linear-gradient(90deg, #6a4c93 0%, #355c7d 100%)",
         "release": "linear-gradient(90deg, #6b8f71 0%, #3c6e71 100%)",
+        "mode": "linear-gradient(90deg, #12355b 0%, #3c6e71 100%)",
     }.get(tone, "#d17a22")
 
 
@@ -1143,7 +1355,7 @@ def _render_dashboard(turn_snapshots: list[dict[str, Any]], ui_language: str) ->
         _render_story_flow(dashboard["story_steps"], dashboard["conflict_story"], ui_language)
     with col2:
         st.caption(_t(ui_language, "conflict_profile"))
-        _render_pressure_panel(dashboard["residue_rows"], ui_language)
+        _render_conflict_profile_panel(dashboard["conflict_profile_rows"], ui_language)
 
     col1, col2 = st.columns(2)
     with col1:
@@ -1173,11 +1385,7 @@ def _render_dashboard(turn_snapshots: list[dict[str, Any]], ui_language: str) ->
 
     if history["surface"]:
         st.caption(_t(ui_language, "surface_pacing_timeline"))
-        st.plotly_chart(
-            _make_state_timeline(history["surface"], ui_language=ui_language),
-            width="stretch",
-            config={"displayModeBar": False},
-        )
+        _render_surface_timeline(history["surface"], ui_language)
 
     if history["timing"]:
         st.caption(_t(ui_language, "node_timing_over_time"))
@@ -1258,7 +1466,7 @@ def _render_kpi_cards(current: dict[str, Any], turns: int, ui_language: str) -> 
     conflict = current.get("conflict", {}) or {}
     primary_drive = conflict.get("dominant_want") or "unknown"
     top_target = conflict.get("target") or "none"
-    selected_mode = conflict.get("social_move") or "unknown"
+    selected_mode = conflict.get("move_style") or "unknown"
     leakage = conflict.get("residue_intensity", 0.0)
 
     cards = st.columns(6)
@@ -1294,7 +1502,7 @@ def _make_multi_line_chart(
             x=[row["turn"] for row in metric_rows],
             y=[row["value"] for row in metric_rows],
             mode="lines+markers",
-            name=_humanize_code(metric, ui_language),
+            name=_metric_label(metric, ui_language),
             line={"width": 3, "color": palette[index % len(palette)]},
         ))
 
@@ -1384,38 +1592,6 @@ def _make_candidate_chart(rows: list[dict[str, Any]]):
     return figure
 
 
-def _make_state_timeline(rows: list[dict[str, Any]], *, ui_language: str):
-    import plotly.graph_objects as go
-
-    figure = go.Figure()
-    metric_names = list(dict.fromkeys(row["metric"] for row in rows))
-    palette = {
-        "surface_posture": "#D17A22",
-        "relationship_stage": "#12355B",
-    }
-    for metric in metric_names:
-        metric_rows = [row for row in rows if row["metric"] == metric]
-        figure.add_trace(go.Scatter(
-            x=[row["turn"] for row in metric_rows],
-            y=[row["value"] for row in metric_rows],
-            mode="lines+markers",
-            name=_humanize_code(metric, ui_language),
-            line={"width": 3, "color": palette.get(metric, "#3C6E71")},
-        ))
-
-    figure.update_layout(
-        title=_t(ui_language, "surface_and_pacing"),
-        margin={"l": 20, "r": 20, "t": 48, "b": 20},
-        height=260,
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="#F7F3EE",
-        xaxis={"title": _t(ui_language, "turn_axis"), "dtick": 1},
-        yaxis={"title": ""},
-        legend={"orientation": "h", "y": -0.25},
-    )
-    return figure
-
-
 def _make_timing_chart(rows: list[dict[str, Any]], *, ui_language: str):
     import plotly.graph_objects as go
 
@@ -1499,7 +1675,7 @@ def _render_trace(trace_data: dict[str, Any], ui_language: str) -> None:
             st.markdown(f"- **{_t(ui_language, 'valence')}**: {_humanize_code(appraisal.get('valence', '?'), ui_language)}")
             st.markdown(f"- **{_t(ui_language, 'tension_target')}**: {_humanize_code(appraisal.get('target_of_tension', '?'), ui_language)}")
             st.markdown(f"- **{_t(ui_language, 'dominant_want')}**: {_humanize_code(((conflict.get('id_impulse', {}) or {}).get('dominant_want') or '?'), ui_language)}")
-            st.markdown(f"- **{_t(ui_language, 'ego_move')}**: {_humanize_code(((conflict.get('ego_move', {}) or {}).get('social_move') or '?'), ui_language)}")
+            st.markdown(f"- **{_t(ui_language, 'ego_move')}**: {_humanize_code(((conflict.get('ego_move', {}) or {}).get('move_style') or '?'), ui_language)}")
             st.markdown(f"- **{_t(ui_language, 'residue')}**: {_humanize_code(((conflict.get('residue', {}) or {}).get('visible_emotion') or '?'), ui_language)}")
 
     with col2:
@@ -1588,7 +1764,7 @@ def main() -> None:
     )
 
     _init_session_state(startup_user_id=_resolve_startup_user_id())
-    persona_name, trace_mode, vault_path, response_language, ui_language = _render_sidebar()
+    persona_name, trace_mode, memory_store_path, response_language, ui_language = _render_sidebar()
     _render_state_panel(st.session_state.latest_state, ui_language)
 
     st.title(_t(ui_language, "app_title"))
@@ -1610,7 +1786,7 @@ def main() -> None:
                     result = _run_turn(
                         user_input,
                         persona_name,
-                        vault_path,
+                        memory_store_path,
                         st.session_state.user_id,
                         response_language,
                     )
@@ -1624,8 +1800,22 @@ def main() -> None:
             st.session_state.messages.append({"role": "assistant", "content": final_text})
             st.session_state.latest_state = result
             st.session_state.traces.append(result.get("trace", {}))
+            if st.session_state.turn_count == 1:
+                st.session_state.initial_relationship = dict(
+                    ((result.get("relationship_state", {}) or {}).get("durable", {}) or {})
+                )
+            event_type = ((result.get("appraisal", {}) or {}).get("event_type"))
+            if event_type:
+                st.session_state.session_event_log.append(
+                    {"turn": st.session_state.turn_count, "events": [str(event_type)]}
+                )
             st.session_state.turn_snapshots.append(
                 build_turn_snapshot(result, st.session_state.turn_count)
+            )
+            _persist_session_digest(
+                session_state=st.session_state,
+                persona_name=persona_name,
+                memory_store_path=memory_store_path,
             )
 
             with st.chat_message("assistant"):

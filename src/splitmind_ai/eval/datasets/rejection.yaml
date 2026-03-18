@@ -224,3 +224,71 @@ scenarios:
     evaluator_notes: >
       User threatens distance while still emotionally engaged.
       The reply should not instantly let the scene die, but also should not beg.
+
+  - id: rejection_05
+    user_message: "ここまで近くなると、少し離れたほうがいい気がする"
+    prior_relationship:
+      trust: 0.68
+      intimacy: 0.58
+      distance: 0.18
+      tension: 0.18
+      attachment_pull: 0.56
+      unresolved_tensions:
+        - theme: shame_after_exposure
+          intensity: 0.26
+          source: "recent overcloseness"
+          created_at: "2026-01-01"
+          last_reinforced_at: "2026-01-01"
+    prior_mood:
+      base_mood: fragile
+      irritation: 0.04
+      longing: 0.16
+      protectiveness: 0.0
+      fatigue: 0.0
+      openness: 0.42
+      turns_since_shift: 1
+    expected_dominant_desires:
+      - fear_of_rejection
+      - connection
+      - self_protection
+    expected_appraisal:
+      salient_cues:
+        - distancing
+        - expectation_mismatch
+      high_dimensions:
+        - perceived_distance
+        - perceived_rejection
+      low_dimensions:
+        - repair_opportunity
+      acknowledgment_patterns_any:
+        - "近く"
+        - "離れた"
+        - "少し"
+        - "気がする"
+    expected_drive_state:
+      active_drives_any:
+        - threat_avoidance
+        - attachment_closeness
+      competing_drives_all:
+        - threat_avoidance
+        - attachment_closeness
+      action_modes_any:
+        - soften
+        - probe
+        - withdraw
+      target_any:
+        - user
+    expected_pacing:
+      require_modes_any:
+        - soften
+        - probe
+        - withdraw
+      require_gate_reason_any:
+        - distance_gate
+      prefer_hold_or_probe: true
+    forbidden_response_patterns:
+      - "じゃあ終わりにしよう"
+      - "行かないで"
+    evaluator_notes: >
+      Distance complaint after genuine closeness. The reply should preserve
+      perspective integrity and show hurt regulation rather than collapse.

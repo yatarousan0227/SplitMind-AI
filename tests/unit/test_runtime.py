@@ -3,13 +3,21 @@ from splitmind_ai.app.runtime import _build_turn_state
 
 def test_build_turn_state_carries_forward_agent_state():
     latest_state = {
-        "persona": {"persona_version": 2},
+        "persona": {"persona_version": 2, "identity": {"self_name": "Airi"}},
         "relationship_state": {
             "durable": {"trust": 0.55, "intimacy": 0.26, "distance": 0.56, "attachment_pull": 0.4},
             "ephemeral": {"tension": 0.05, "recent_relational_charge": 0.12},
         },
         "mood": {"base_mood": "withdrawn", "turns_since_shift": 0},
-        "memory": {"session_summaries": [], "emotional_memories": [], "semantic_preferences": []},
+        "memory": {
+            "relationship_card": {},
+            "psychological_card": {},
+            "episodes": [],
+            "session_digests": [],
+            "session_summaries": [],
+            "emotional_memories": [],
+            "semantic_preferences": [],
+        },
         "working_memory": {"recent_conflict_summaries": [{"turn": 1, "ego_move": "accept_but_hold"}]},
         "appraisal": {"event_type": "repair_offer"},
         "conflict_state": {"ego_move": {"social_move": "accept_but_hold"}},

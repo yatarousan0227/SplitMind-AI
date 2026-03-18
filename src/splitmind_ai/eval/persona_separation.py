@@ -230,17 +230,43 @@ def _aggregate_baseline_summary(runs: list[dict[str, Any]]) -> dict[str, Any]:
 
         collapse_pairs = 0
         pair_count = 0
+        move_style_divergences: list[float] = []
+        event_accuracy_scores: list[float] = []
+        perspective_failures = 0
+        flattening_hits = 0
         for scenario_runs in grouped.values():
+            styles = {
+                str((((run.get("conflict_state") or {}).get("ego_move") or {}).get("move_style") or ""))
+                for run in scenario_runs
+            }
+            if scenario_runs:
+                move_style_divergences.append(len({style for style in styles if style}) / max(1, len(scenario_runs)))
             for pair in _pairwise_distances(scenario_runs):
                 scenario_pairwise.append(pair["combined_distance"])
                 pair_count += 1
                 if pair["combined_distance"] < 0.32:
                     collapse_pairs += 1
+            for run in scenario_runs:
+                checks = list((run.get("heuristic") or {}).get("checks", []) or [])
+                event_check = next((check for check in checks if check.get("check_name") == "event_fit"), None)
+                perspective_check = next((check for check in checks if check.get("check_name") == "perspective_integrity"), None)
+                if event_check is not None:
+                    event_accuracy_scores.append(float(event_check.get("score", 0.0) or 0.0))
+                if perspective_check is not None and not bool(perspective_check.get("passed", True)):
+                    perspective_failures += 1
+                flattening_risk = float(((run.get("fidelity_gate") or {}).get("flattening_risk", 0.0)) or 0.0)
+                if flattening_risk >= 0.6:
+                    flattening_hits += 1
 
         summary[baseline] = {
+            "inter_persona_lexical_divergence": round(sum(scenario_pairwise) / len(scenario_pairwise), 4) if scenario_pairwise else 0.0,
             "avg_pairwise_distance": round(sum(scenario_pairwise) / len(scenario_pairwise), 4) if scenario_pairwise else 0.0,
             "min_pairwise_distance": round(min(scenario_pairwise), 4) if scenario_pairwise else 0.0,
             "collapse_pair_rate": round(collapse_pairs / pair_count, 4) if pair_count else 0.0,
+            "move_style_divergence": round(sum(move_style_divergences) / len(move_style_divergences), 4) if move_style_divergences else 0.0,
+            "event_accuracy": round(sum(event_accuracy_scores) / len(event_accuracy_scores), 4) if event_accuracy_scores else 0.0,
+            "perspective_inversion_rate": round(perspective_failures / len(baseline_runs), 4) if baseline_runs else 0.0,
+            "flattening_rate": round(flattening_hits / len(baseline_runs), 4) if baseline_runs else 0.0,
             "avg_heuristic_score": round(
                 sum(run["heuristic"]["overall_score"] for run in baseline_runs) / len(baseline_runs),
                 4,
@@ -305,15 +331,15 @@ def _build_markdown_report(
         "",
         "## Baseline Summary",
         "",
-        "| Baseline | Avg Pairwise Distance | Min Pairwise Distance | Collapse Pair Rate | Avg Heuristic | Avg Structural |",
-        "| --- | ---: | ---: | ---: | ---: | ---: |",
+        "| Baseline | Lexical Divergence | Move-Style Div. | Event Acc. | Perspective Inv. | Flattening | Avg Structural |",
+        "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
 
     for baseline, stats in baseline_summary.items():
         lines.append(
-            f"| {baseline} | {stats['avg_pairwise_distance']:.3f} | {stats['min_pairwise_distance']:.3f} | "
-            f"{stats['collapse_pair_rate']:.1%} | {stats['avg_heuristic_score']:.3f} | "
-            f"{stats['avg_structural_score']:.3f} |"
+            f"| {baseline} | {stats['inter_persona_lexical_divergence']:.3f} | {stats['move_style_divergence']:.3f} | "
+            f"{stats['event_accuracy']:.3f} | {stats['perspective_inversion_rate']:.1%} | "
+            f"{stats['flattening_rate']:.1%} | {stats['avg_structural_score']:.3f} |"
         )
 
     lines.extend([
@@ -359,17 +385,19 @@ def _build_markdown_report(
             f"- Category: {scenario.get('category', '')}",
             f"- User message: {scenario.get('user_message', '')}",
             "",
-            "| Baseline | Persona | Response | Appraisal | Residue | Score | Structural |",
-            "| --- | --- | --- | --- | --- | ---: | ---: |",
+            "| Baseline | Persona | Response | Appraisal | Move Style | Residue | Structural | Flat Risk |",
+            "| --- | --- | --- | --- | --- | --- | ---: | ---: |",
         ])
         for run in sorted(scenario_runs, key=lambda item: (item["baseline"], item["persona"])):
             appraisal = (run.get("appraisal") or {}).get("event_type", "-")
+            move_style = (((run.get("conflict_state") or {}).get("ego_move") or {}).get("move_style", "-"))
             residue = ((run.get("conflict_state") or {}).get("residue") or {}).get("visible_emotion", "-")
+            flattening_risk = float(((run.get("fidelity_gate") or {}).get("flattening_risk", 0.0)) or 0.0)
             response = run["response_text"].replace("\n", " ").strip()
             lines.append(
                 f"| {run['baseline']} | {run['persona']} | {response[:80]}{'...' if len(response) > 80 else ''} | "
-                f"{appraisal} | {residue} | {run['heuristic']['overall_score']:.3f} | "
-                f"{run['heuristic']['structural_score']:.3f} |"
+                f"{appraisal} | {move_style} | {residue} | {run['heuristic']['structural_score']:.3f} | "
+                f"{flattening_risk:.2f} |"
             )
 
     return "\n".join(lines) + "\n"
@@ -401,6 +429,7 @@ async def run_persona_separation_eval(
                     "appraisal": result.get("appraisal"),
                     "conflict_state": result.get("conflict_state"),
                     "relationship_state": result.get("relationship_state"),
+                    "turn_shaping_policy": result.get("turn_shaping_policy"),
                     "fidelity_gate": result.get("fidelity_gate"),
                     "latency_ms": result.get("latency_ms"),
                     "payload": result.get("payload"),

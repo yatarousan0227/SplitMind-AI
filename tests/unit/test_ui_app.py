@@ -6,8 +6,10 @@ from splitmind_ai.ui.app import (
     _build_turn_state,
     _get_or_create_runtime,
     _init_session_state,
+    _persist_session_digest,
     _reset_session_state,
     _resolve_startup_user_id,
+    _surface_timeline_by_turn,
 )
 
 
@@ -36,13 +38,21 @@ def test_assistant_trace_indices_ignore_non_assistant_messages():
 
 def test_build_turn_state_carries_forward_new_agent_state():
     latest_state = {
-        "persona": {"persona_version": 2},
+        "persona": {"persona_version": 2, "identity": {"self_name": "Airi"}},
         "relationship_state": {
             "durable": {"trust": 0.55, "intimacy": 0.26, "distance": 0.56},
             "ephemeral": {"tension": 0.05},
         },
         "mood": {"base_mood": "withdrawn", "turns_since_shift": 0},
-        "memory": {"session_summaries": [], "emotional_memories": [], "semantic_preferences": []},
+        "memory": {
+            "relationship_card": {},
+            "psychological_card": {},
+            "episodes": [],
+            "session_digests": [],
+            "session_summaries": [],
+            "emotional_memories": [],
+            "semantic_preferences": [],
+        },
         "working_memory": {"recent_conflict_summaries": [{"turn": 1, "ego_move": "accept_but_hold"}]},
         "appraisal": {"event_type": "repair_offer"},
         "conflict_state": {"ego_move": {"social_move": "accept_but_hold"}},
@@ -140,9 +150,9 @@ def test_get_or_create_runtime_reuses_compiled_graph_for_same_config(monkeypatch
         llm_calls.append(resolved_settings)
         return "llm"
 
-    def fake_build_splitmind_graph(*, llm, persona_name, vault_path, max_iterations):
-        graph_calls.append((llm, persona_name, vault_path, max_iterations))
-        return {"compiled_for": persona_name, "vault_path": vault_path}
+    def fake_build_splitmind_graph(*, llm, persona_name, memory_store_path, max_iterations):
+        graph_calls.append((llm, persona_name, memory_store_path, max_iterations))
+        return {"compiled_for": persona_name, "memory_store_path": memory_store_path}
 
     monkeypatch.setattr(app_module, "create_chat_llm", fake_create_chat_llm)
     monkeypatch.setattr("splitmind_ai.app.graph.build_splitmind_graph", fake_build_splitmind_graph)
@@ -151,13 +161,13 @@ def test_get_or_create_runtime_reuses_compiled_graph_for_same_config(monkeypatch
         session_state=session_state,
         settings=settings,
         persona_name="cold_attached_idol",
-        vault_path="/tmp/vault",
+        memory_store_path="/tmp/memory",
     )
     second = _get_or_create_runtime(
         session_state=session_state,
         settings=settings,
         persona_name="cold_attached_idol",
-        vault_path="/tmp/vault",
+        memory_store_path="/tmp/memory",
     )
 
     assert first == second
@@ -183,7 +193,7 @@ def test_get_or_create_runtime_rebuilds_when_persona_changes(monkeypatch):
     monkeypatch.setattr(
         "splitmind_ai.app.graph.build_splitmind_graph",
         (
-            lambda *, llm, persona_name, vault_path, max_iterations:
+            lambda *, llm, persona_name, memory_store_path, max_iterations:
             graph_calls.append((persona_name, max_iterations)) or persona_name
         ),
     )
@@ -192,13 +202,13 @@ def test_get_or_create_runtime_rebuilds_when_persona_changes(monkeypatch):
         session_state=session_state,
         settings=settings,
         persona_name="cold_attached_idol",
-        vault_path=None,
+        memory_store_path=None,
     )
     _get_or_create_runtime(
         session_state=session_state,
         settings=settings,
         persona_name="warm_guarded_companion",
-        vault_path=None,
+        memory_store_path=None,
     )
 
     assert graph_calls == [
@@ -224,4 +234,70 @@ def test_reset_session_state_clears_turn_snapshots():
     assert session_state["traces"] == []
     assert session_state["latest_state"] == {}
     assert session_state["turn_snapshots"] == []
+    assert session_state["initial_relationship"] == {}
+    assert session_state["session_event_log"] == []
     assert session_state["session_id"] != "old"
+
+
+def test_persist_session_digest_writes_markdown_file(tmp_path):
+    session_state = {
+        "messages": [
+            {"role": "user", "content": "hello"},
+            {"role": "assistant", "content": "hi"},
+        ],
+        "session_id": "s1",
+        "turn_count": 1,
+        "user_id": "alice",
+        "initial_relationship": {"trust": 0.6},
+        "session_event_log": [{"turn": 1, "events": ["repair_offer"]}],
+        "latest_state": {
+            "relationship_state": {"durable": {"trust": 0.6, "relationship_stage": "warming"}},
+            "mood": {"base_mood": "calm"},
+        },
+    }
+
+    _persist_session_digest(
+        session_state=session_state,
+        persona_name="cold_attached_idol",
+        memory_store_path=str(tmp_path),
+    )
+
+    digest = tmp_path / "alice" / "cold_attached_idol" / "sessions" / "s1.md"
+    assert digest.exists()
+
+
+def test_persist_session_digest_skips_when_no_turns(tmp_path):
+    session_state = {
+        "messages": [],
+        "session_id": "s1",
+        "turn_count": 0,
+        "user_id": "alice",
+        "initial_relationship": {},
+        "session_event_log": [],
+        "latest_state": {},
+    }
+
+    _persist_session_digest(
+        session_state=session_state,
+        persona_name="cold_attached_idol",
+        memory_store_path=str(tmp_path),
+    )
+
+    digest = tmp_path / "alice" / "cold_attached_idol" / "sessions" / "s1.md"
+    assert not digest.exists()
+
+
+def test_surface_timeline_by_turn_groups_surface_states_per_turn():
+    grouped = _surface_timeline_by_turn(
+        [
+            {"turn": 1, "metric": "move_style", "value": "accept_but_hold"},
+            {"turn": 2, "metric": "move_style", "value": "defer_without_chasing"},
+            {"turn": 1, "metric": "relationship_stage", "value": "warming"},
+            {"turn": 2, "metric": "relationship_stage", "value": "charged"},
+        ]
+    )
+
+    assert grouped == [
+        {"turn": 1, "states": {"move_style": "accept_but_hold", "relationship_stage": "warming"}},
+        {"turn": 2, "states": {"move_style": "defer_without_chasing", "relationship_stage": "charged"}},
+    ]

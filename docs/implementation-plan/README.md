@@ -220,6 +220,20 @@ appraisal / action policy / memory をまたぐ駆動系へ引き上げる。
 
 詳細: [`14-persona-separation-architecture.md`](./14-persona-separation-architecture.md)
 
+### Phase 15
+
+persona の固定自己名と、セッションをまたぐ関係性・心理連続性を、
+Vault ではなく frontmatter 付き Markdown card store で実装する。
+
+焦点:
+- `identity.self_name` の persona schema 追加
+- `user_id x persona_name` 単位の persistent memory
+- `relationship card / psychological card / episodes / session digests` への整理
+- bootstrap 時の memory budget 制御
+- transcript 非依存の cross-session continuity
+
+詳細: [`15-persona-identity-and-persistent-memory.md`](./15-persona-identity-and-persistent-memory.md)
+
 初期実装では以下を推奨する。
 
 ```text

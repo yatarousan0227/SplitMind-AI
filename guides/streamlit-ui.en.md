@@ -29,7 +29,7 @@ The sidebar exposes:
 
 - persona selector
 - trace toggle
-- vault persistence toggle
+- persistent memory toggle
 - response language
 - reset session
 - user id / session id / turn count
@@ -198,8 +198,10 @@ Latest-turn combined summary of:
 - If replies feel too soft, inspect `ego move` and `fidelity warnings`.
 - If pacing feels off, inspect `relationship stage` and `escalation_allowed`.
 - If you want the semantic meaning of the turn, start with `appraisal.event_type`.
+- If you want to inspect cross-session continuity, compare the `memory_commit` output with what `session_bootstrap` restores on the next session.
 
 ## Related Docs
 
 - [implementation-overview.en.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/guides/implementation-overview.en.md)
 - [concept.en.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/concept.en.md)
+- [15-persona-identity-and-persistent-memory.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/implementation-plan/15-persona-identity-and-persistent-memory.md)

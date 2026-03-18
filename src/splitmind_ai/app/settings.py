@@ -54,8 +54,8 @@ class RuntimeSettings(BaseModel):
     supervisor: str = "main"
 
 
-class VaultSettings(BaseModel):
-    path: str = "./vault"
+class MemoryStoreSettings(BaseModel):
+    path: str = "./data/memory"
     enabled: bool = True
 
 
@@ -80,7 +80,7 @@ class StateUpdateRule(BaseModel):
 class Settings(BaseModel):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     runtime: RuntimeSettings = Field(default_factory=RuntimeSettings)
-    vault: VaultSettings = Field(default_factory=VaultSettings)
+    memory_store: MemoryStoreSettings = Field(default_factory=MemoryStoreSettings)
     mood: MoodSettings = Field(default_factory=MoodSettings)
     personas: PersonasSettings = Field(default_factory=PersonasSettings)
     state_update_rules: dict[str, StateUpdateRule] = Field(default_factory=dict)
@@ -116,8 +116,14 @@ def _apply_env_overrides(settings: Settings) -> Settings:
         "AZURE_OPENAI_API_VERSION",
         settings.llm.api_version,
     )
-    settings.vault.path = os.environ.get("SPLITMIND_VAULT_PATH", settings.vault.path)
-    settings.vault.enabled = _env_flag("SPLITMIND_VAULT_ENABLED", settings.vault.enabled)
+    settings.memory_store.path = os.environ.get(
+        "SPLITMIND_MEMORY_STORE_PATH",
+        os.environ.get("SPLITMIND_VAULT_PATH", settings.memory_store.path),
+    )
+    settings.memory_store.enabled = _env_flag(
+        "SPLITMIND_MEMORY_STORE_ENABLED",
+        _env_flag("SPLITMIND_VAULT_ENABLED", settings.memory_store.enabled),
+    )
     settings.personas.default = os.environ.get("SPLITMIND_PERSONA", settings.personas.default)
     return settings
 
@@ -137,6 +143,9 @@ def load_settings(
 
     with open(config_path) as f:
         raw = yaml.safe_load(f) or {}
+
+    if "vault" in raw and "memory_store" not in raw:
+        raw["memory_store"] = raw.pop("vault")
 
     rules_raw = raw.pop("state_update", {}).get("rules", {})
     rules = {k: StateUpdateRule(**v) for k, v in rules_raw.items()}

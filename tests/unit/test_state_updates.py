@@ -128,6 +128,38 @@ class TestUpdateRelationshipState:
         assert result["durable"]["repair_depth"] > 0.0
         assert result["ephemeral"]["turn_local_repair_opening"] > 0.0
 
+    def test_commitment_request_handles_dict_ego_move(self):
+        state = {
+            "durable": {
+                "trust": 0.5,
+                "intimacy": 0.3,
+                "distance": 0.5,
+                "attachment_pull": 0.3,
+                "relationship_stage": "warming",
+                "commitment_readiness": 0.2,
+                "repair_depth": 0.0,
+            },
+            "ephemeral": {
+                "tension": 0.1,
+                "recent_relational_charge": 0.0,
+                "escalation_allowed": False,
+                "interaction_fragility": 0.1,
+                "turn_local_repair_opening": 0.0,
+            },
+        }
+        result = update_relationship_state(
+            relationship_state=state,
+            appraisal={"event_type": "commitment_request", "target_of_tension": "status"},
+            conflict_state={
+                "id_impulse": {"intensity": 0.4},
+                "residue": {"intensity": 0.3},
+                "ego_move": {"social_move": {"unexpected": "dict"}},
+            },
+            event_flags={"repair_attempt": True},
+        )
+
+        assert result["durable"]["commitment_readiness"] > 0.2
+
 
 class TestRunFullUpdate:
     def test_full_pipeline(self):

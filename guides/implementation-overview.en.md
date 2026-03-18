@@ -10,8 +10,9 @@ flowchart LR
     D --> E["conflict_engine"]
     E --> F["expression_realizer"]
     F --> G["fidelity_gate"]
-    G --> H["memory_commit"]
-    H --> I["vault_store / dashboard snapshots"]
+    G --> H["memory_interpreter"]
+    H --> I["memory_commit"]
+    I --> J["markdown_store / dashboard snapshots"]
 ```
 
 ## Entry Points
@@ -58,8 +59,9 @@ The default pipeline is:
 
 - normalizes request and session data
 - loads persona
-- restores `relationship_state.durable`, mood, and memory from the vault
+- restores `relationship_state.durable`, mood, and memory from markdown persistent memory
 - initializes `relationship_state.ephemeral` and `working_memory`
+- keeps `persona.identity.self_name` in internal session metadata
 
 ### `AppraisalNode`
 
@@ -104,11 +106,25 @@ It records:
 
 in trace output.
 
+### `MemoryInterpreterNode`
+
+Interprets what this turn should leave behind in persistent memory and working memory.
+
+It returns:
+
+- `event_flags`
+- `active_themes`
+- `current_episode_summary`
+- `recent_conflict_summary`
+
+for `memory_commit`.
+
 ### `MemoryCommitNode`
 
 - updates `relationship_state` and `mood` with rules
-- persists only `relationship_state.durable`
+- updates the `relationship-card` and `psychological-card`
 - updates memory candidates and working memory
+- writes episode digests into markdown persistent memory
 
 ### `ErrorNode`
 
@@ -134,6 +150,7 @@ The key design split is:
 
 1. `persona`
    static personality structure
+   including `identity.self_name`
 2. `relational_profile`
    static priors for relating to others
 3. `relationship_state`
@@ -160,11 +177,13 @@ If you want to understand behavior quickly, this order works well:
 5. [expression_realizer.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/expression_realizer.py)
 6. [fidelity_gate.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/fidelity_gate.py)
 7. [memory_commit.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/memory_commit.py)
-8. [state_updates.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/rules/state_updates.py)
-9. [vault_store.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/memory/vault_store.py)
+8. [memory_interpreter.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/memory_interpreter.py)
+9. [state_updates.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/rules/state_updates.py)
+10. [markdown_store.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/memory/markdown_store.py)
 
 ## Related Docs
 
 - [streamlit-ui.en.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/guides/streamlit-ui.en.md)
 - [concept.en.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/concept.en.md)
 - [README.en.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/implementation-plan/README.en.md)
+- [15-persona-identity-and-persistent-memory.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/implementation-plan/15-persona-identity-and-persistent-memory.md)

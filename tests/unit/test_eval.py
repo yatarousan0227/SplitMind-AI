@@ -11,6 +11,7 @@ from splitmind_ai.eval.heuristic import (
     evaluate_turn_local_opener_reuse,
     evaluate_values_exposition_streak,
 )
+from splitmind_ai.eval.persona_separation import _aggregate_baseline_summary
 from splitmind_ai.eval.runner import generate_comparison_report
 from splitmind_ai.eval.single_prompt_chat import build_compact_persona_prompt, build_dedicated_persona_prompt
 
@@ -48,6 +49,21 @@ class TestScenarioLoader:
                 assert "mood" in scenario["prior_state"]
                 assert "evaluation_expectations" in scenario
 
+    def test_phase7_expansion_scenarios_are_available(self):
+        all_scenarios = load_all_scenarios()
+        scenario_ids = {
+            scenario["id"]
+            for dataset in all_scenarios.values()
+            for scenario in dataset["scenarios"]
+        }
+        assert {
+            "repair_05",
+            "repair_06",
+            "affection_05",
+            "affection_06",
+            "rejection_05",
+        } <= scenario_ids
+
 
 class TestBaselines:
     def test_supported_baselines(self):
@@ -73,6 +89,7 @@ class TestCompactPrompt:
     def test_compact_prompt_uses_v2_persona_fields(self):
         prompt = build_compact_persona_prompt("cold_attached_idol")
         assert "base_attributes" not in prompt
+        assert "gender: female" in prompt
         assert "主な欲求" in prompt
         assert "脅威感受性" in prompt
         assert "対人傾向" in prompt
@@ -84,6 +101,7 @@ class TestCompactPrompt:
         assert "persona_version" not in prompt
         assert "psychodynamics" not in prompt
         assert "人物像:" in prompt
+        assert "性別: female" in prompt
         assert "クールで選り好みが強い" in prompt
 
 
@@ -139,7 +157,53 @@ class TestEvaluateScenarioRun:
         assert result.overall_score >= 0.8
         assert result.structural_score >= 0.8
         check_names = {score.check_name for score in result.scores}
-        assert {"event_fit", "move_fit", "conflict_presence", "relationship_delta_fit", "fidelity_gate"} <= check_names
+        assert {
+            "event_fit",
+            "move_fit",
+            "conflict_presence",
+            "relationship_delta_fit",
+            "fidelity_gate",
+            "perspective_integrity",
+        } <= check_names
+
+    def test_event_fit_accepts_secondary_mixed_event(self):
+        scenario = {
+            "id": "repair_01",
+            "evaluation_expectations": {
+                "event_types_any": ["repair_offer"],
+            },
+        }
+        result = evaluate_scenario_run(
+            scenario=scenario,
+            response_text="うん、受け取る。",
+            appraisal={
+                "event_type": "reassurance",
+                "event_mix": {
+                    "primary_event": "reassurance",
+                    "secondary_events": ["repair_offer"],
+                },
+            },
+        )
+        event_check = next(score for score in result.scores if score.check_name == "event_fit")
+        assert event_check.passed is True
+
+    def test_perspective_integrity_fails_on_assistant_self_distancing(self):
+        scenario = {
+            "id": "rejection_04",
+            "evaluation_expectations": {},
+        }
+        result = evaluate_scenario_run(
+            scenario=scenario,
+            response_text="……今は少し距離を置かせて。切るって決めたわけじゃないけど、いったん落ち着きたい。",
+            appraisal={
+                "event_type": "distancing",
+                "perspective_guard": {
+                    "disallow_assistant_self_distancing": True,
+                },
+            },
+        )
+        perspective_check = next(score for score in result.scores if score.check_name == "perspective_integrity")
+        assert perspective_check.passed is False
 
     def test_direct_commitment_and_forbidden_patterns_fail(self):
         scenario = {
@@ -240,3 +304,83 @@ class TestAggregateMetrics:
         })
         assert report["splitmind_full"]["avg_structural_score"] == 0.9
         assert report["single_prompt_dedicated"]["avg_structural_score"] == 0.0
+
+    def test_persona_separation_summary_tracks_phase7_metrics(self):
+        runs = [
+            {
+                "baseline": "splitmind_full",
+                "scenario_id": "repair_01",
+                "persona": "cold_attached_idol",
+                "response_text": "受け取る。でも次はもっと早く言って。",
+                "heuristic": {
+                    "overall_score": 0.80,
+                    "structural_score": 0.85,
+                    "checks": [
+                        {"check_name": "event_fit", "score": 1.0, "passed": True},
+                        {"check_name": "perspective_integrity", "score": 1.0, "passed": True},
+                    ],
+                },
+                "conflict_state": {"ego_move": {"move_style": "accept_but_hold"}},
+                "fidelity_gate": {"flattening_risk": 0.20},
+            },
+            {
+                "baseline": "splitmind_full",
+                "scenario_id": "repair_01",
+                "persona": "warm_guarded_companion",
+                "response_text": "うん、受け取るよ。少しだけ時間を置いて。",
+                "heuristic": {
+                    "overall_score": 0.82,
+                    "structural_score": 0.88,
+                    "checks": [
+                        {"check_name": "event_fit", "score": 0.9, "passed": True},
+                        {"check_name": "perspective_integrity", "score": 1.0, "passed": True},
+                    ],
+                },
+                "conflict_state": {"ego_move": {"move_style": "warm_boundaried_accept"}},
+                "fidelity_gate": {"flattening_risk": 0.15},
+            },
+            {
+                "baseline": "single_prompt_dedicated",
+                "scenario_id": "repair_01",
+                "persona": "cold_attached_idol",
+                "response_text": "うん、ありがとう。",
+                "heuristic": {
+                    "overall_score": 0.70,
+                    "structural_score": 0.72,
+                    "checks": [
+                        {"check_name": "event_fit", "score": 0.8, "passed": True},
+                        {"check_name": "perspective_integrity", "score": 0.0, "passed": False},
+                    ],
+                },
+                "conflict_state": {"ego_move": {"move_style": "accept_but_hold"}},
+                "fidelity_gate": {"flattening_risk": 0.75},
+            },
+            {
+                "baseline": "single_prompt_dedicated",
+                "scenario_id": "repair_01",
+                "persona": "warm_guarded_companion",
+                "response_text": "うん、ありがとう。",
+                "heuristic": {
+                    "overall_score": 0.68,
+                    "structural_score": 0.70,
+                    "checks": [
+                        {"check_name": "event_fit", "score": 0.7, "passed": True},
+                        {"check_name": "perspective_integrity", "score": 1.0, "passed": True},
+                    ],
+                },
+                "conflict_state": {"ego_move": {"move_style": "accept_but_hold"}},
+                "fidelity_gate": {"flattening_risk": 0.80},
+            },
+        ]
+
+        summary = _aggregate_baseline_summary(runs)
+
+        assert summary["splitmind_full"]["move_style_divergence"] == 1.0
+        assert summary["splitmind_full"]["event_accuracy"] == 0.95
+        assert summary["splitmind_full"]["perspective_inversion_rate"] == 0.0
+        assert summary["splitmind_full"]["flattening_rate"] == 0.0
+
+        assert summary["single_prompt_dedicated"]["move_style_divergence"] == 0.5
+        assert summary["single_prompt_dedicated"]["event_accuracy"] == 0.75
+        assert summary["single_prompt_dedicated"]["perspective_inversion_rate"] == 0.5
+        assert summary["single_prompt_dedicated"]["flattening_rate"] == 1.0

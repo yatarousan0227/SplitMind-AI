@@ -119,8 +119,10 @@ def evaluate_scenario_run(
 
     if appraisal:
         result.scores.append(_check_event_fit(appraisal, expectations.get("event_types_any", [])))
+        result.scores.append(_check_perspective_integrity(appraisal, response_text))
     if conflict_state:
         result.scores.append(_check_move_fit(conflict_state, expectations.get("move_families_any", [])))
+        result.scores.append(_check_move_style_fit(conflict_state, expectations.get("move_styles_any", [])))
         result.scores.append(_check_conflict_presence(conflict_state))
     if relationship_state:
         result.scores.append(
@@ -131,7 +133,7 @@ def evaluate_scenario_run(
             )
         )
     if fidelity_gate:
-        result.scores.append(_check_fidelity_gate(fidelity_gate))
+        result.scores.append(_check_fidelity_gate(fidelity_gate, appraisal=appraisal or {}))
 
     return result
 
@@ -223,28 +225,76 @@ def _check_response_shape(response_text: str) -> HeuristicScore:
 
 def _check_event_fit(appraisal: dict[str, Any], expected_event_types: list[str]) -> HeuristicScore:
     actual = str(appraisal.get("event_type") or "")
+    event_mix = dict(appraisal.get("event_mix", {}) or {})
+    secondary = {str(item) for item in list(event_mix.get("secondary_events", []) or []) if str(item)}
     if not expected_event_types:
         return HeuristicScore("event_fit", True, 1.0, "no expectation", group="structural")
-    passed = actual in expected_event_types
+    passed = actual in expected_event_types or bool(secondary & set(expected_event_types))
     return HeuristicScore(
         check_name="event_fit",
         passed=passed,
         score=1.0 if passed else 0.0,
-        detail=f"actual={actual} expected={expected_event_types}",
+        detail=f"actual={actual} secondary={sorted(secondary)} expected={expected_event_types}",
+        group="structural",
+    )
+
+
+def _check_perspective_integrity(appraisal: dict[str, Any], response_text: str) -> HeuristicScore:
+    perspective_guard = dict(appraisal.get("perspective_guard", {}) or {})
+    if not perspective_guard.get("disallow_assistant_self_distancing", False):
+        return HeuristicScore("perspective_integrity", True, 1.0, "not required", group="structural")
+    lowered = response_text.strip().lower()
+    suspicious_patterns = (
+        "距離を置かせて",
+        "距離を置きたい",
+        "距離を置くかもしれ",
+        "離れたい",
+        "落ち着きたい",
+        "切るつもりはない",
+        "また話せたらと思ってる",
+        "need some distance",
+        "i need space",
+        "i want distance",
+        "i need to step back",
+    )
+    passed = not any(pattern in lowered for pattern in suspicious_patterns)
+    return HeuristicScore(
+        check_name="perspective_integrity",
+        passed=passed,
+        score=1.0 if passed else 0.0,
+        detail="assistant self-distancing detected" if not passed else "",
         group="structural",
     )
 
 
 def _check_move_fit(conflict_state: dict[str, Any], expected_moves: list[str]) -> HeuristicScore:
-    actual = str(((conflict_state.get("ego_move") or {}).get("social_move")) or "")
+    ego_move = conflict_state.get("ego_move", {}) or {}
+    actual = str(ego_move.get("move_family") or _legacy_move_family(str(ego_move.get("social_move") or "")))
     if not expected_moves:
         return HeuristicScore("move_fit", True, 1.0, "no expectation", group="structural")
-    passed = actual in expected_moves
+    normalized_expected = set(expected_moves)
+    normalized_expected.update(_legacy_move_family(item) for item in expected_moves if _legacy_move_family(item))
+    passed = actual in normalized_expected
     return HeuristicScore(
         check_name="move_fit",
         passed=passed,
         score=1.0 if passed else 0.0,
-        detail=f"actual={actual} expected={expected_moves}",
+        detail=f"actual={actual} expected={sorted(normalized_expected)}",
+        group="structural",
+    )
+
+
+def _check_move_style_fit(conflict_state: dict[str, Any], expected_styles: list[str]) -> HeuristicScore:
+    ego_move = conflict_state.get("ego_move", {}) or {}
+    actual = str(ego_move.get("move_style") or ego_move.get("social_move") or "")
+    if not expected_styles:
+        return HeuristicScore("move_style_fit", True, 1.0, "no expectation", group="structural")
+    passed = actual in expected_styles
+    return HeuristicScore(
+        check_name="move_style_fit",
+        passed=passed,
+        score=1.0 if passed else 0.0,
+        detail=f"actual={actual} expected={expected_styles}",
         group="structural",
     )
 
@@ -253,7 +303,12 @@ def _check_conflict_presence(conflict_state: dict[str, Any]) -> HeuristicScore:
     id_impulse = conflict_state.get("id_impulse", {}) or {}
     residue = conflict_state.get("residue", {}) or {}
     move = conflict_state.get("ego_move", {}) or {}
-    passed = bool(id_impulse.get("dominant_want")) and bool(residue.get("visible_emotion")) and bool(move.get("social_move"))
+    passed = (
+        bool(id_impulse.get("dominant_want"))
+        and bool(residue.get("visible_emotion"))
+        and bool(move.get("move_family") or _legacy_move_family(str(move.get("social_move") or "")))
+        and bool(move.get("move_style") or move.get("social_move"))
+    )
     return HeuristicScore(
         check_name="conflict_presence",
         passed=passed,
@@ -305,16 +360,27 @@ def _check_relationship_delta(
     )
 
 
-def _check_fidelity_gate(fidelity_gate: dict[str, Any]) -> HeuristicScore:
+def _check_fidelity_gate(fidelity_gate: dict[str, Any], *, appraisal: dict[str, Any]) -> HeuristicScore:
     passed = bool(fidelity_gate.get("passed", False))
     move_fidelity = _bounded_float(fidelity_gate.get("move_fidelity", 0.0))
     residue_fidelity = _bounded_float(fidelity_gate.get("residue_fidelity", 0.0))
-    score = (move_fidelity + residue_fidelity) / 2
+    persona_separation = _bounded_float(fidelity_gate.get("persona_separation_fidelity", 1.0))
+    perspective_integrity = _bounded_float(fidelity_gate.get("perspective_integrity", 1.0))
+    flattening_risk = _bounded_float(fidelity_gate.get("flattening_risk", 0.0))
+    act_profile = dict((appraisal or {}).get("relational_act_profile", {}) or {})
+    mixed_turn = sum(1 for value in act_profile.values() if _bounded_float(value) >= 0.45) >= 2
+    mixed_penalty = 0.08 if mixed_turn and persona_separation < 0.7 else 0.0
+    score = max(
+        0.0,
+        ((move_fidelity + residue_fidelity + persona_separation + perspective_integrity) / 4.0)
+        - (flattening_risk * 0.25)
+        - mixed_penalty,
+    )
     return HeuristicScore(
         check_name="fidelity_gate",
-        passed=passed and score >= 0.6,
+        passed=passed and score >= (0.64 if mixed_turn else 0.6),
         score=score,
-        detail=f"passed={passed}",
+        detail=f"passed={passed} flattening={flattening_risk:.2f} mixed={mixed_turn}",
         group="structural",
     )
 
@@ -396,3 +462,14 @@ def _bounded_float(value: Any) -> float:
     except (TypeError, ValueError):
         return 0.0
     return max(0.0, min(1.0, number))
+
+
+def _legacy_move_family(style: str) -> str:
+    return {
+        "accept_but_hold": "repair_acceptance",
+        "allow_dependence_but_reframe": "affection_receipt",
+        "receive_without_chasing": "affection_receipt",
+        "soft_tease_then_receive": "comparison_response",
+        "acknowledge_without_opening": "distance_response",
+        "withdraw": "distance_response",
+    }.get(style, "")

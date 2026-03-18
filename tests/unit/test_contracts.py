@@ -33,6 +33,11 @@ class TestPersonaContracts:
     def test_persona_profile_validates(self):
         persona = PersonaProfile.model_validate({
             "persona_version": 2,
+            "identity": {
+                "self_name": "Airi",
+                "display_name": "Cold Attached Idol",
+            },
+            "gender": "female",
             "psychodynamics": {
                 "drives": {"closeness": 0.72, "status": 0.81},
                 "threat_sensitivity": {"rejection": 0.84, "shame": 0.76},
@@ -69,12 +74,19 @@ class TestPersonaContracts:
         })
 
         assert persona.persona_version == 2
+        assert persona.identity.self_name == "Airi"
+        assert persona.gender == "female"
         assert persona.psychodynamics.drives["closeness"] == pytest.approx(0.72)
 
     def test_persona_profile_rejects_unknown_fields(self):
         with pytest.raises(ValidationError):
             PersonaProfile.model_validate({
                 "persona_version": 2,
+                "identity": {
+                    "self_name": "Airi",
+                    "display_name": "Cold Attached Idol",
+                },
+                "gender": "female",
                 "psychodynamics": {},
                 "relational_profile": {
                     "attachment_pattern": "neutral",
@@ -114,6 +126,26 @@ class TestAppraisalContracts:
             "summary_short": "User offers repair with emotional weight.",
             "user_intent_guess": "restore_bond",
             "active_themes": ["repair", "status"],
+            "event_mix": {
+                "primary_event": "repair_offer",
+                "secondary_events": ["reassurance"],
+                "comparison_frame": "none",
+                "repair_signal_strength": 0.84,
+                "priority_signal_strength": 0.76,
+                "distance_signal_strength": 0.0,
+            },
+            "speaker_intent": {
+                "user_distance_request": False,
+                "user_repair_bid": True,
+                "user_comparison_target": "",
+                "user_commitment_signal": False,
+                "user_is_describing_own_state": False,
+            },
+            "perspective_guard": {
+                "preserve_user_as_subject": False,
+                "disallow_assistant_self_distancing": False,
+                "rationale": "",
+            },
         })
 
         assert appraisal.event_type == RelationalEventType.repair_offer
@@ -121,6 +153,8 @@ class TestAppraisalContracts:
         assert appraisal.target_of_tension == TensionTarget.pride
         assert appraisal.stakes == Stakes.high
         assert appraisal.cues[0].label == "apology"
+        assert appraisal.event_mix.secondary_events == [RelationalEventType.reassurance]
+        assert appraisal.speaker_intent.user_repair_bid is True
 
     def test_relational_cue_bounds(self):
         with pytest.raises(ValidationError):

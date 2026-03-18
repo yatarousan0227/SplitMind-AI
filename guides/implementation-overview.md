@@ -10,8 +10,9 @@ flowchart LR
     D --> E["conflict_engine"]
     E --> F["expression_realizer"]
     F --> G["fidelity_gate"]
-    G --> H["memory_commit"]
-    H --> I["vault_store / dashboard snapshots"]
+    G --> H["memory_interpreter"]
+    H --> I["memory_commit"]
+    I --> J["markdown_store / dashboard snapshots"]
 ```
 
 ## エントリポイント
@@ -58,8 +59,9 @@ graph は [graph.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitm
 
 - request / session 情報を正規化
 - persona を読み込む
-- vault から `relationship_state.durable`、mood、memory を復元
+- markdown persistent memory から `relationship_state.durable`、mood、memory を復元
 - `relationship_state.ephemeral` と `working_memory` を初期化
+- `persona.identity.self_name` を internal session metadata に保持
 
 ### `AppraisalNode`
 
@@ -102,8 +104,19 @@ graph は [graph.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitm
 ### `MemoryCommitNode`
 
 - rule-based に `relationship_state` と `mood` を更新
-- `relationship_state.durable` だけを永続化
+- `relationship-card` と `psychological-card` を更新
 - memory candidates と working memory を更新
+- markdown persistent memory に episode digest を保存
+
+### `MemoryInterpreterNode`
+
+- このターンを長期記憶にどう残すかを構造化する
+- `event_flags`
+- `active_themes`
+- `current_episode_summary`
+- `recent_conflict_summary`
+
+を返し、`memory_commit` の保存判断に渡します。
 
 ### `ErrorNode`
 
@@ -129,6 +142,7 @@ graph は [graph.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitm
 
 1. `persona`
    静的な人格構造
+   - `identity.self_name` を含む
 2. `relational_profile`
    他者一般への静的 prior
 3. `relationship_state`
@@ -155,11 +169,13 @@ active prompt builders は [conflict_pipeline.py](/Users/iwasakishinya/Documents
 5. [expression_realizer.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/expression_realizer.py)
 6. [fidelity_gate.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/fidelity_gate.py)
 7. [memory_commit.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/memory_commit.py)
-8. [state_updates.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/rules/state_updates.py)
-9. [vault_store.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/memory/vault_store.py)
+8. [memory_interpreter.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/nodes/memory_interpreter.py)
+9. [state_updates.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/rules/state_updates.py)
+10. [markdown_store.py](/Users/iwasakishinya/Documents/hook/SplitMind-AI/src/splitmind_ai/memory/markdown_store.py)
 
 ## 関連ドキュメント
 
 - [streamlit-ui.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/guides/streamlit-ui.md)
 - [concept.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/concept.md)
 - [README.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/implementation-plan/README.md)
+- [15-persona-identity-and-persistent-memory.md](/Users/iwasakishinya/Documents/hook/SplitMind-AI/docs/implementation-plan/15-persona-identity-and-persistent-memory.md)

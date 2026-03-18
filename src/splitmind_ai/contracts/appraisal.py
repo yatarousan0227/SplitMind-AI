@@ -69,6 +69,62 @@ class RelationalCue(StrictContractModel):
     confidence: float = Field(ge=0.0, le=1.0, default=0.5)
 
 
+class EventMix(StrictContractModel):
+    """Mixed-event parse that preserves primary and secondary relational meanings."""
+
+    primary_event: RelationalEventType = Field(default=RelationalEventType.unknown)
+    secondary_events: list[RelationalEventType] = Field(default_factory=list)
+    comparison_frame: str = Field(default="none")
+    repair_signal_strength: float = Field(ge=0.0, le=1.0, default=0.0)
+    priority_signal_strength: float = Field(ge=0.0, le=1.0, default=0.0)
+    distance_signal_strength: float = Field(ge=0.0, le=1.0, default=0.0)
+
+
+class RelationalActProfile(StrictContractModel):
+    """Continuous relational-act strengths that preserve mixed-turn meaning."""
+
+    affection: float = Field(ge=0.0, le=1.0, default=0.0)
+    repair_bid: float = Field(ge=0.0, le=1.0, default=0.0)
+    reassurance: float = Field(ge=0.0, le=1.0, default=0.0)
+    commitment: float = Field(ge=0.0, le=1.0, default=0.0)
+    priority_restore: float = Field(ge=0.0, le=1.0, default=0.0)
+    comparison: float = Field(ge=0.0, le=1.0, default=0.0)
+    distancing: float = Field(ge=0.0, le=1.0, default=0.0)
+
+
+class SpeakerIntent(StrictContractModel):
+    """User-side intent anchors to keep perspective stable downstream."""
+
+    user_distance_request: bool = Field(default=False)
+    user_repair_bid: bool = Field(default=False)
+    user_comparison_target: str = Field(default="")
+    user_commitment_signal: bool = Field(default=False)
+    user_is_describing_own_state: bool = Field(default=False)
+
+
+class PerspectiveGuard(StrictContractModel):
+    """Constraints that preserve subject perspective through downstream nodes."""
+
+    preserve_user_as_subject: bool = Field(default=False)
+    disallow_assistant_self_distancing: bool = Field(default=False)
+    rationale: str = Field(default="")
+
+
+class RelationalCueParse(StrictContractModel):
+    """LLM-authored pre-appraisal relational cue parse."""
+
+    cues: list[RelationalCue] = Field(default_factory=list)
+    event_mix: EventMix = Field(default_factory=EventMix)
+    relational_act_profile: RelationalActProfile = Field(default_factory=RelationalActProfile)
+    speaker_intent: SpeakerIntent = Field(default_factory=SpeakerIntent)
+    perspective_guard: PerspectiveGuard = Field(default_factory=PerspectiveGuard)
+    target_hint: TensionTarget = Field(default=TensionTarget.ambiguity)
+    valence_hint: AppraisalValence = Field(default=AppraisalValence.neutral)
+    stakes_hint: Stakes = Field(default=Stakes.low)
+    user_intent_guess: str = Field(default="")
+    active_themes: list[str] = Field(default_factory=list)
+
+
 class StimulusAppraisal(StrictContractModel):
     """Relational interpretation of the latest user turn."""
 
@@ -81,3 +137,7 @@ class StimulusAppraisal(StrictContractModel):
     summary_short: str = Field(default="")
     user_intent_guess: str = Field(default="")
     active_themes: list[str] = Field(default_factory=list)
+    event_mix: EventMix = Field(default_factory=EventMix)
+    relational_act_profile: RelationalActProfile = Field(default_factory=RelationalActProfile)
+    speaker_intent: SpeakerIntent = Field(default_factory=SpeakerIntent)
+    perspective_guard: PerspectiveGuard = Field(default_factory=PerspectiveGuard)

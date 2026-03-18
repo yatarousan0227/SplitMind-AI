@@ -19,7 +19,7 @@ class ConflictEngineNode(ModularNode):
     CONTRACT: ClassVar[NodeContract] = NodeContract(
         name="conflict_engine",
         description="Resolve persona priors and appraisal into a turn-local conflict state",
-        reads=["persona", "relationship_state", "appraisal", "memory", "working_memory", "conversation"],
+        reads=["persona", "relational_policy", "relationship_state", "appraisal", "residue_state", "memory", "working_memory", "conversation"],
         writes=["conflict_state", "trace"],
         requires_llm=True,
         supervisor="main",
@@ -27,7 +27,7 @@ class ConflictEngineNode(ModularNode):
             TriggerCondition(
                 priority=70,
                 when={"appraisal.event_type": True},
-                when_not={"conflict_state.ego_move.social_move": True},
+                when_not={"conflict_state.ego_move.move_style": True},
                 llm_hint="Run after appraisal to derive id, superego, ego, and residue",
             ),
         ],
@@ -41,16 +41,20 @@ class ConflictEngineNode(ModularNode):
 
         started_at = perf_counter()
         persona = inputs.get_slice("persona")
+        relational_policy = inputs.get_slice("relational_policy")
         relationship_state = inputs.get_slice("relationship_state")
         appraisal = inputs.get_slice("appraisal")
+        residue_state = inputs.get_slice("residue_state")
         memory = inputs.get_slice("memory")
         working_memory = inputs.get_slice("working_memory")
         conversation = inputs.get_slice("conversation")
 
         messages = build_conflict_engine_prompt(
             persona=persona,
+            relational_policy=relational_policy,
             relationship_state=relationship_state,
             appraisal=appraisal,
+            residue_state=residue_state,
             memory=memory,
             working_memory=working_memory,
             conversation=conversation,
@@ -69,8 +73,9 @@ class ConflictEngineNode(ModularNode):
         payload["used_llm"] = True
         payload["conflict_engine_ms"] = round((perf_counter() - started_at) * 1000, 2)
         logger.debug(
-            "conflict_engine complete move=%s residue=%s",
-            conflict.ego_move.social_move,
+            "conflict_engine complete family=%s style=%s residue=%s",
+            conflict.ego_move.move_family,
+            conflict.ego_move.move_style,
             conflict.residue.visible_emotion,
         )
         return NodeOutputs(

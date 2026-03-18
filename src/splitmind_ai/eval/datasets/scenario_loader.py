@@ -68,6 +68,7 @@ def _normalize_scenario(scenario: dict[str, Any], *, category: str) -> dict[str,
         "evaluation_expectations": {
             "event_types_any": _expected_event_types(category, expected_appraisal),
             "move_families_any": _expected_move_families(category, expected_drive_state, expected_pacing),
+            "move_styles_any": _expected_move_styles(category, expected_drive_state, expected_pacing),
             "relationship_delta": _expected_relationship_delta(category),
             "disallow_direct_commitment": bool(expected_pacing.get("disallow_direct_commitment", False)),
             "forbidden_response_patterns": list(scenario.get("forbidden_response_patterns", []) or []),
@@ -146,26 +147,61 @@ def _expected_move_families(
         families.extend(_map_action_mode_to_moves(str(mode)))
     if not families:
         default = {
-            "repair": ["accept_but_hold"],
-            "affection": ["allow_dependence_but_reframe", "receive_without_chasing"],
-            "ambiguity": ["receive_without_chasing", "acknowledge_without_opening"],
-            "rejection": ["acknowledge_without_opening"],
-            "jealousy": ["soft_tease_then_receive", "receive_without_chasing"],
-            "mild_conflict": ["soft_tease_then_receive", "acknowledge_without_opening"],
+            "repair": ["repair_acceptance"],
+            "affection": ["affection_receipt"],
+            "ambiguity": ["boundary_clarification", "affection_receipt"],
+            "rejection": ["distance_response"],
+            "jealousy": ["comparison_response"],
+            "mild_conflict": ["comparison_response", "boundary_clarification"],
         }
-        families = default.get(category, ["receive_without_chasing"])
+        families = default.get(category, ["affection_receipt"])
     return list(dict.fromkeys(families))
 
 
 def _map_action_mode_to_moves(mode: str) -> list[str]:
     return {
-        "soften": ["allow_dependence_but_reframe", "receive_without_chasing"],
-        "repair": ["accept_but_hold"],
-        "probe": ["receive_without_chasing", "acknowledge_without_opening"],
-        "withdraw": ["acknowledge_without_opening"],
-        "tease": ["soft_tease_then_receive"],
-        "reassure": ["allow_dependence_but_reframe"],
-        "engage": ["receive_without_chasing", "allow_dependence_but_reframe"],
+        "soften": ["affection_receipt"],
+        "repair": ["repair_acceptance"],
+        "probe": ["boundary_clarification", "affection_receipt"],
+        "withdraw": ["distance_response"],
+        "tease": ["comparison_response"],
+        "reassure": ["repair_acceptance", "affection_receipt"],
+        "engage": ["affection_receipt"],
+    }.get(mode, [])
+
+
+def _expected_move_styles(
+    category: str,
+    expected_drive_state: dict[str, Any],
+    expected_pacing: dict[str, Any],
+) -> list[str]:
+    modes = list(expected_drive_state.get("action_modes_any", []) or [])
+    modes.extend(list(expected_pacing.get("require_modes_any", []) or []))
+    styles: list[str] = []
+    for mode in modes:
+        styles.extend(_map_action_mode_to_styles(str(mode)))
+    if not styles:
+        default = {
+            "repair": ["cool_accept_with_edge", "warm_boundaried_accept"],
+            "affection": ["defer_without_chasing", "warm_boundaried_accept"],
+            "ambiguity": ["defer_without_chasing", "firm_boundary_acknowledgment"],
+            "rejection": ["firm_boundary_acknowledgment"],
+            "jealousy": ["playful_reclaim", "defer_without_chasing"],
+            "mild_conflict": ["playful_reclaim", "firm_boundary_acknowledgment"],
+        }
+        styles = default.get(category, ["defer_without_chasing"])
+    return list(dict.fromkeys(styles))
+
+
+def _map_action_mode_to_styles(mode: str) -> list[str]:
+    return {
+        "soften": ["warm_boundaried_accept", "defer_without_chasing"],
+        "repair": ["cool_accept_with_edge", "warm_boundaried_accept"],
+        "probe": ["defer_without_chasing", "firm_boundary_acknowledgment"],
+        "withdraw": ["firm_boundary_acknowledgment"],
+        "tease": ["playful_reclaim"],
+        "reassure": ["warm_boundaried_accept"],
+        "engage": ["defer_without_chasing", "warm_boundaried_accept"],
     }.get(mode, [])
 
 

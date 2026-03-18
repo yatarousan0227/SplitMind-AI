@@ -21,6 +21,15 @@ AFFECT_METRICS = (
     "closure",
 )
 
+CONFLICT_SIGNAL_METRICS = (
+    "id_intensity",
+    "superego_pressure",
+    "stability",
+    "residue_intensity",
+    "directness",
+    "closure",
+)
+
 APPRAISAL_DIMENSIONS = (
     "confidence",
     "stakes",
@@ -99,7 +108,8 @@ def build_turn_snapshot(result: dict[str, Any], turn_number: int) -> dict[str, A
             "self_image_to_protect": superego.get("self_image_to_protect") or "",
             "superego_pressure": _bounded_float(superego.get("pressure")),
             "shame_load": _bounded_float(superego.get("shame_load")),
-            "social_move": ego_move.get("social_move") or "",
+            "move_family": ego_move.get("move_family") or "",
+            "move_style": ego_move.get("move_style") or "",
             "move_rationale": ego_move.get("move_rationale") or "",
             "stability": _bounded_float(ego_move.get("stability")),
             "visible_emotion": residue.get("visible_emotion") or "",
@@ -161,7 +171,7 @@ def build_history_rows(turn_snapshots: list[dict[str, Any]]) -> dict[str, list[d
                 "value": _bounded_float(relationship.get(metric)),
             })
 
-        for metric in AFFECT_METRICS:
+        for metric in CONFLICT_SIGNAL_METRICS:
             affect_rows.append({
                 "turn": turn,
                 "metric": metric,
@@ -181,12 +191,12 @@ def build_history_rows(turn_snapshots: list[dict[str, Any]]) -> dict[str, list[d
 
         conflict = snapshot.get("conflict", {}) or {}
         pacing = snapshot.get("pacing", {}) or {}
-        social_move = str(conflict.get("social_move") or "")
+        social_move = str(conflict.get("move_style") or "")
         relationship_stage = str(pacing.get("relationship_stage") or "")
         if social_move:
             surface_rows.append({
                 "turn": turn,
-                "metric": "social_move",
+                "metric": "move_style",
                 "value": social_move,
             })
         if relationship_stage:
@@ -215,6 +225,7 @@ def build_current_dashboard(turn_snapshots: list[dict[str, Any]]) -> dict[str, A
             "story_steps": [],
             "event_groups": [],
             "appraisal_radar": [],
+            "conflict_profile_rows": [],
             "conflict_rows": [],
             "expression_rows": [],
             "pacing_rows": [],
@@ -237,6 +248,7 @@ def build_current_dashboard(turn_snapshots: list[dict[str, Any]]) -> dict[str, A
         "current": latest,
         "conflict_story": _build_conflict_story(latest),
         "story_steps": story_steps,
+        "conflict_profile_rows": _build_conflict_profile_rows(latest),
         "conflict_rows": _build_conflict_rows(latest),
         "expression_rows": _build_expression_rows(latest),
         "pacing_rows": _build_pacing_rows(latest),
@@ -400,7 +412,7 @@ def _build_story_steps(snapshot: dict[str, Any]) -> list[dict[str, str]]:
         },
         {
             "stage": "Ego Move",
-            "value": str(conflict.get("social_move") or "none"),
+            "value": str(conflict.get("move_style") or "none"),
             "note": f"Stability {conflict.get('stability', 0.0):.2f}",
             "tone": "mode",
         },
@@ -442,7 +454,7 @@ def _build_conflict_story(snapshot: dict[str, Any]) -> str:
         return "No active conflict loop yet."
 
     target = str(conflict.get("target") or "an unfixed target")
-    social_move = str(conflict.get("social_move") or "an unresolved move")
+    social_move = str(conflict.get("move_style") or "an unresolved move")
     blocked = list(conflict.get("forbidden_moves", []) or [])
     residue = str(conflict.get("visible_emotion") or "contained residue")
     story = f"{dominant_want} is aimed at {target}"
@@ -481,6 +493,63 @@ def _build_residue_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             "tone": tones[key],
         })
     return rows
+
+
+def _build_conflict_profile_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
+    conflict = snapshot.get("conflict", {}) or {}
+    expression = snapshot.get("expression", {}) or {}
+    forbidden_moves = list(conflict.get("forbidden_moves", []) or [])
+
+    return [
+        {
+            "key": "id_profile",
+            "label": "Id",
+            "value": str(conflict.get("dominant_want") or "none"),
+            "meter_label": "Id Intensity",
+            "meter_value": _bounded_float(conflict.get("id_intensity")),
+            "tone": "heat",
+            "target": str(conflict.get("target") or ""),
+        },
+        {
+            "key": "superego_profile",
+            "label": "Superego",
+            "value": str(forbidden_moves[0] if forbidden_moves else (conflict.get("self_image_to_protect") or "clear")),
+            "meter_label": "Superego Pressure",
+            "meter_value": _bounded_float(conflict.get("superego_pressure")),
+            "tone": "risk",
+            "forbidden_moves": forbidden_moves[:2],
+            "self_image_to_protect": str(conflict.get("self_image_to_protect") or ""),
+        },
+        {
+            "key": "ego_profile",
+            "label": "Ego Move",
+            "value": str(conflict.get("move_style") or "none"),
+            "meter_label": "Stability",
+            "meter_value": _bounded_float(conflict.get("stability")),
+            "tone": "mode",
+            "move_family": str(conflict.get("move_family") or ""),
+            "dominant_compromise": str(conflict.get("move_rationale") or ""),
+        },
+        {
+            "key": "residue_profile",
+            "label": "Residue",
+            "value": str(conflict.get("visible_emotion") or "contained"),
+            "meter_label": "Residue Intensity",
+            "meter_value": _bounded_float(conflict.get("residue_intensity")),
+            "tone": "carry",
+            "leak_channel": str(conflict.get("leak_channel") or ""),
+        },
+        {
+            "key": "expression_profile",
+            "label": "Expression",
+            "value": str(expression.get("temperature") or "unknown"),
+            "meter_label": "Directness",
+            "meter_value": _bounded_float(expression.get("directness")),
+            "tone": "block",
+            "length": str(expression.get("length") or ""),
+            "closure": _bounded_float(expression.get("closure")),
+        },
+    ]
 
 
 def _build_expression_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
@@ -534,9 +603,9 @@ def _build_conflict_rows(snapshot: dict[str, Any]) -> list[dict[str, Any]]:
             "target": str(conflict.get("target") or ""),
         },
         {
-            "key": "social_move",
-            "label": "Social move",
-            "value": str(conflict.get("social_move") or "none"),
+            "key": "move_style",
+            "label": "Move style",
+            "value": str(conflict.get("move_style") or "none"),
             "target": "",
         },
         {

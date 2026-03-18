@@ -6,6 +6,7 @@ from splitmind_ai.prompts.conflict_pipeline import (
     build_expression_realizer_prompt,
     build_fidelity_gate_prompt,
     build_memory_interpreter_prompt,
+    build_relational_cue_prompt,
 )
 
 __all__ = [
@@ -14,4 +15,5 @@ __all__ = [
     "build_expression_realizer_prompt",
     "build_fidelity_gate_prompt",
     "build_memory_interpreter_prompt",
+    "build_relational_cue_prompt",
 ]

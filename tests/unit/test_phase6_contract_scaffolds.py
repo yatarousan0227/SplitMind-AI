@@ -33,10 +33,19 @@ def test_stimulus_appraisal_scaffold_validates():
         summary_short="User frames the disclosure as exclusive.",
         user_intent_guess="increase_closeness",
         active_themes=["specialness", "priority"],
+        event_mix={
+            "primary_event": RelationalEventType.exclusive_disclosure,
+            "secondary_events": [RelationalEventType.affection_signal],
+            "comparison_frame": "none",
+            "repair_signal_strength": 0.0,
+            "priority_signal_strength": 0.72,
+            "distance_signal_strength": 0.0,
+        },
     )
 
     assert appraisal.event_type == RelationalEventType.exclusive_disclosure
     assert appraisal.cues[0].label == "special_to_you"
+    assert appraisal.event_mix.priority_signal_strength == 0.72
 
 
 def test_conflict_state_scaffold_validates():
@@ -79,6 +88,11 @@ def test_conflict_state_scaffold_validates():
 
 def test_persona_and_relationship_scaffolds_validate():
     persona = PersonaProfile(
+        identity={
+            "self_name": "Airi",
+            "display_name": "Cold Attached Idol",
+        },
+        gender="female",
         psychodynamics={
             "drives": {"closeness": 0.81},
             "threat_sensitivity": {"rejection": 0.73},
